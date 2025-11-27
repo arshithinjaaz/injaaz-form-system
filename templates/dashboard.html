@@ -18,6 +18,8 @@
         body { 
             background-color: var(--injaaz-secondary); 
             min-height: 100vh;
+            /* Added to allow scrolling when sidebar is open on mobile */
+            overflow-x: hidden; 
         }
 
         /* Sidebar Styling */
@@ -34,28 +36,26 @@
             box-shadow: 2px 0 10px rgba(0,0,0,0.1);
         }
         #sidebar .sidebar-heading {
-            /* PADDING ADJUSTED FOR A LARGER HEADER AREA */
             padding: 2rem 1rem 1.5rem; 
             font-size: 1.2rem;
             font-weight: bold;
             text-align: center;
             background-color: rgba(0, 0, 0, 0.1); 
-            /* *** STACKED LAYOUT CHANGE: Use column flex direction *** */
             display: flex; 
-            flex-direction: column; /* Stacks items vertically */
+            flex-direction: column;
             align-items: center;
             justify-content: center;
         }
         
         /* New Logo Styling */
         .sidebar-logo {
-            max-height: 150px; /* INCREASED HEIGHT for prominence */
+            max-height: 150px;
             width: auto;
-            margin-right: 0; /* Remove right margin from previous side-by-side design */
-            margin-bottom: 10px; /* Add space between logo and text */
+            margin-bottom: 10px;
             border-radius: 4px; 
         }
 
+        /* Sidebar Links */
         #sidebar .list-group-item {
             background-color: var(--injaaz-primary);
             color: white;
@@ -73,14 +73,46 @@
             border-radius: 0;
         }
         
-        /* Main Content Styling */
-        #content-wrapper {
+        /* Main Content Styling (Default for Desktop) */
+        #page-content-wrapper {
             margin-left: 250px; 
             padding: 30px;
             flex-grow: 1;
         }
 
-        /* Report Item Card Styling for the content area */
+        /* --- New Styling for Sidebar Toggling --- */
+        /* Class applied to the wrapper when the sidebar is hidden/shown */
+        .toggled #sidebar {
+            margin-left: -250px;
+        }
+
+        /* --- MEDIA QUERY for Mobile Responsiveness --- */
+        @media (max-width: 768px) {
+            /* On small screens, hide the sidebar by moving it off-screen */
+            #sidebar {
+                margin-left: -250px;
+            }
+            /* The toggled class brings the sidebar back */
+            .toggled #sidebar {
+                margin-left: 0;
+            }
+            /* On small screens, the content should take up the full width */
+            #page-content-wrapper {
+                margin-left: 0;
+                padding-top: 60px; /* Space for the fixed navbar */
+            }
+            /* When the sidebar is shown, slightly overlay the content */
+            .toggled #page-content-wrapper {
+                 /* Prevents content from being pushed, just overlays */
+            }
+        }
+        
+        /* Navbar styling for mobile button */
+        .navbar {
+            background-color: var(--injaaz-primary);
+        }
+
+        /* Report Item Card Styling (Kept as is) */
         .report-card {
             background: white;
             border-radius: 12px;
@@ -137,49 +169,63 @@
             </a>
         </div>
     </div>
-    <div id="content-wrapper">
-        <h1 class="mt-4 text-dark mb-0">Reporting & Tools Launchpad</h1>
-        <p class="lead text-muted mb-5">Quick access to all available report generation forms.</p>
+    <div id="page-content-wrapper" class="w-100">
+        
+        <nav class="navbar navbar-expand-lg navbar-dark border-bottom fixed-top d-md-none">
+            <button class="btn btn-primary" id="sidebarToggle" style="background-color: var(--injaaz-accent); border: none;">
+                <i class="fas fa-bars"></i>
+            </button>
+            <span class="navbar-brand ms-3">INJAAZ</span>
+        </nav>
+        
+        <div id="content-wrapper">
+            <h1 class="mt-4 text-dark mb-0">Reporting & Tools Launchpad</h1>
+            <p class="lead text-muted mb-5">Quick access to all available report generation forms.</p>
 
-        <div class="row g-4">
-            
-            <div class="col-sm-6 col-lg-4">
-                <a href="{{ url_for('site_visit_bp.index') }}" class="report-card border-start border-5 border-success" style="border-color: var(--injaaz-primary) !important;">
-                    <div>
-                        <i class="fas fa-tools card-icon text-success" style="color: var(--injaaz-primary) !important;"></i>
-                        <h5 class="card-title">Site Visit Report - HVAC & MEP</h5>
-                        <p class="card-text text-muted">Generate comprehensive reports for Mechanical, Electrical, and Plumbing work.</p>
-                    </div>
-                    <p class="card-footer-text text-end">Launch Form <i class="fas fa-arrow-right ms-2"></i></p>
-                </a>
-            </div>
-
-            <div class="col-sm-6 col-lg-4">
-                <a href="{{ url_for('site_assessment.index') }}" class="report-card border-start border-5 border-info">
-                    <div>
-                        <i class="fas fa-broom card-icon text-info"></i>
-                        <h5 class="card-title">Site Visit Report - Cleaning</h5>
-                        <p class="card-text text-muted">Log cleaning and site assessment details for quality assurance and compliance.</p>
-                    </div>
-                    <p class="card-footer-text text-end">Launch Form <i class="fas fa-arrow-right ms-2"></i></p>
-                </a>
-            </div>
-
-            <div class="col-sm-6 col-lg-4">
-                <div class="report-card bg-light text-muted">
-                    <div>
-                        <i class="fas fa-chart-bar card-icon text-secondary"></i>
-                        <h5 class="card-title">Analytics Dashboard</h5>
-                        <p class="card-text">View trends, KPI metrics, and summary data from submitted reports.</p>
-                    </div>
-                    <p class="card-footer-text text-end">Feature Coming Soon</p>
+            <div class="row g-4">
+                
+                <div class="col-sm-6 col-lg-4">
+                    <a href="{{ url_for('site_visit_bp.index') }}" class="report-card border-start border-5 border-success" style="border-color: var(--injaaz-primary) !important;">
+                        <div>
+                            <i class="fas fa-tools card-icon text-success" style="color: var(--injaaz-primary) !important;"></i>
+                            <h5 class="card-title">Site Visit Report - HVAC & MEP</h5>
+                            <p class="card-text text-muted">Generate comprehensive reports for Mechanical, Electrical, and Plumbing work.</p>
+                        </div>
+                        <p class="card-footer-text text-end">Launch Form <i class="fas fa-arrow-right ms-2"></i></p>
+                    </a>
                 </div>
-            </div>
 
+                <div class="col-sm-6 col-lg-4">
+                    <a href="{{ url_for('site_assessment.index') }}" class="report-card border-start border-5 border-info">
+                        <div>
+                            <i class="fas fa-broom card-icon text-info"></i>
+                            <h5 class="card-title">Site Visit Report - Cleaning</h5>
+                            <p class="card-text text-muted">Log cleaning and site assessment details for quality assurance and compliance.</p>
+                        </div>
+                        <p class="card-footer-text text-end">Launch Form <i class="fas fa-arrow-right ms-2"></i></p>
+                    </a>
+                </div>
+
+                <div class="col-sm-6 col-lg-4">
+                    <div class="report-card bg-light text-muted">
+                        <div>
+                            <i class="fas fa-chart-bar card-icon text-secondary"></i>
+                            <h5 class="card-title">Analytics Dashboard</h5>
+                            <p class="card-text">View trends, KPI metrics, and summary data from submitted reports.</p>
+                        </div>
+                        <p class="card-footer-text text-end">Feature Coming Soon</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
         </div>
     </div>
-    </div>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.getElementById("sidebarToggle").addEventListener("click", function() {
+        document.getElementById("wrapper").classList.toggle("toggled");
+    });
+</script>
 </body>
 </html>
