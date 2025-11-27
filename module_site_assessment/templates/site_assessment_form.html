@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Assessment Report Form - INJAAZ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script> 
+    <style>
+        body { background-color: #f4f7f6; }
+        .form-container { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1); 
+            margin-bottom: 20px;
+        }
+        .header-section { border-bottom: 3px solid #125435; padding-bottom: 15px; margin-bottom: 20px; }
+        .logo { max-height: 50px; }
+        /* Style the tabs for better visibility */
+        .nav-tabs .nav-link { color: #555; border: none; border-bottom: 3px solid transparent; margin-right: 15px; font-weight: 500;}
+        .nav-tabs .nav-link.active { color: #125435; border-color: #125435; background-color: transparent; font-weight: bold;}
+        .tab-content { padding-top: 20px; }
+        .section-heading { color: #125435; font-weight: bold; margin-bottom: 15px; border-left: 5px solid #125435; padding-left: 10px; }
+        .btn-success-custom { background-color: #125435; border-color: #125435; color: white; }
+        .btn-success-custom:hover { background-color: #17794b; border-color: #0d3c26; color: white; }
+        /* Photo Previews */
+        .image-preview { max-width: 100px; max-height: 100px; object-fit: cover; border-radius: 4px; }
+        .photo-container { position: relative; display: inline-block; margin: 5px; border: 1px solid #ddd; padding: 5px; border-radius: 6px; }
+        .remove-photo { position: absolute; top: 0; right: 0; background: red; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; line-height: 1; padding: 0; cursor: pointer; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-11">
+            <div class="form-container">
+                
+                <div class="header-section text-center">
+                    <h2 class="text-uppercase" style="color: #125435;">Site Assessment Report</h2>
+                </div>
+
+                <div id="status-message" class="alert d-none" role="alert"></div>
+
+                <form id="site-assessment-form">
+                    <ul class="nav nav-tabs" id="assessmentTabs" role="tablist">
+                        <li class="nav-item" role="presentation"><button class="nav-link active" id="tab-1-link" data-bs-toggle="tab" data-bs-target="#tab-1" type="button" role="tab">1. Project & Facility</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-2-link" data-bs-toggle="tab" data-bs-target="#tab-2" type="button" role="tab">2. Cleaning & Scope</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-3-link" data-bs-toggle="tab" data-bs-target="#tab-3" type="button" role="tab">3. Safety & Staffing</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-4-link" data-bs-toggle="tab" data-bs-target="#tab-4" type="button" role="tab">4. Visual Evidence</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-5-link" data-bs-toggle="tab" data-bs-target="#tab-5" type="button" role="tab">5. Sign-off & Submit</button></li>
+                    </ul>
+
+                    <div class="tab-content" id="assessmentTabContent">
+                        
+                        <div class="tab-pane fade show active" id="tab-1" role="tabpanel">
+                            
+                            <h4 class="section-heading">Project & Client Details</h4>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="client_name" class="form-label">Client Name</label>
+                                    <input type="text" class="form-control" id="client_name" name="client_name" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="project_name" class="form-label">Project Name</label>
+                                    <input type="text" class="form-control" id="project_name" name="project_name" required>
+                                </div>
+                                <div class="col-12">
+                                    <label for="site_address" class="form-label">Site Address</label>
+                                    <input type="text" class="form-control" id="site_address" name="site_address" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="date_of_visit" class="form-label">Date of Visit</label>
+                                    <input type="date" class="form-control" id="date_of_visit" name="date_of_visit" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="key_person_name" class="form-label">Key Person/Contact Name</label>
+                                    <input type="text" class="form-control" id="key_person_name" name="key_person_name" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="contact_number" class="form-label">Contact Number</label>
+                                    <input type="tel" class="form-control" id="contact_number" name="contact_number">
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <h4 class="section-heading">Site Count & Current Operations</h4>
+                            <div class="row g-3">
+                                
+                                <div class="col-md-4"><label class="form-label">Room Count (General)</label><input type="number" class="form-control" name="room_count" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Current Team Size</label><input type="number" class="form-control" name="current_team_size" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Lift Count (Total)</label><input type="number" class="form-control" name="lift_count_total" min="0"></div>
+                                <div class="col-12"><label class="form-label">Current Team Description</label><textarea class="form-control" name="current_team_desc" rows="2" placeholder="e.g., 5 cleaners, 1 supervisor, 8 hours/day"></textarea></div>
+                                
+                                <div class="col-12"><h5 class="mt-3 text-secondary">Facility Area Counts (Specify Quantities)</h5></div>
+
+                                <div class="col-md-4"><label class="form-label">Floor (Description/Name)</label><input type="text" class="form-control" name="facility_floor"></div>
+                                <div class="col-md-4"><label class="form-label">Ground Parking (Count)</label><input type="number" class="form-control" name="facility_ground_parking" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Basement (Count)</label><input type="number" class="form-control" name="facility_basement" min="0"></div>
+                                
+                                <div class="col-md-4"><label class="form-label">Podium (Count)</label><input type="number" class="form-control" name="facility_podium" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Gym Room (Count)</label><input type="number" class="form-control" name="facility_gym_room" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Swimming Pool (Count)</label><input type="number" class="form-control" name="facility_swimming_pool" min="0"></div>
+
+                                <div class="col-md-4"><label class="form-label">Washroom (Male Count)</label><input type="number" class="form-control" name="facility_washroom_male" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Washroom (Female Count)</label><input type="number" class="form-control" name="facility_washroom_female" min="0"></div>
+                                
+                                <div class="col-md-4"><label class="form-label">Changing Room (Count)</label><input type="number" class="form-control" name="facility_changing_room" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Kids Play Area (Count)</label><input type="number" class="form-control" name="facility_play_kids_place" min="0"></div>
+                                
+                                <div class="col-md-4"><label class="form-label">Garbage Room (Count)</label><input type="number" class="form-control" name="facility_garbage_room" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Floor Chute Room (Count)</label><input type="number" class="form-control" name="facility_floor_chute_room" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Staircase (Count)</label><input type="number" class="form-control" name="facility_staircase" min="0"></div>
+                                
+                                <div class="col-md-4"><label class="form-label">Floor Service Room (Count)</label><input type="number" class="form-control" name="facility_floor_service_room" min="0"></div>
+                                <div class="col-md-4"><label class="form-label">Cleaner (Total Count)</label><input type="number" class="form-control" name="facility_cleaner_count" min="0"></div>
+                            </div>
+
+                            <div class="d-flex mt-4">
+                                <button type="button" class="btn btn-primary ms-auto" onclick="goToTab(2)">Next: Cleaning & Scope &raquo;</button>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-2" role="tabpanel">
+                            
+                            <h4 class="section-heading">Cleaning Requirements & Scope</h4>
+
+                            <h5 class="mt-4 text-success">Routine Cleaning Scope (Areas)</h5>
+                            <div class="row g-2 ps-3 border p-3 rounded mb-4">
+                                <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="scope_offices" value="True"><label class="form-check-label">Offices</label></div></div>
+                                <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="scope_toilets" value="True"><label class="form-check-label">Toilets/Washrooms</label></div></div>
+                                <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="scope_hallways" value="True"><label class="form-check-label">Corridors/Hallways</label></div></div>
+                                <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="scope_kitchen" value="True"><label class="form-check-label">Kitchen/Pantry</label></div></div>
+                                <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="scope_exterior" value="True"><label class="form-check-label">Building Exterior (Glass/Fascia)</label></div></div>
+                                <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="scope_special_care" value="True"><label class="form-check-label">Special Care Areas (Specify below)</label></div></div>
+                            </div>
+
+                            <h5 class="mt-4 text-success">Deep Cleaning Requirements</h5>
+                            <div class="row g-3 border p-3 rounded mb-4">
+                                <div class="col-md-6">
+                                    <label class="form-label">Deep Cleaning Required?</label>
+                                    <select class="form-select" name="deep_clean_required">
+                                        <option value="No">No</option>
+                                        <option value="Yes">Yes</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Areas to Deep Clean (if Yes)</label>
+                                    <input type="text" class="form-control" name="deep_clean_areas" placeholder="e.g., Marble floors, carpets">
+                                </div>
+                            </div>
+
+                            <h5 class="mt-4 text-success">Waste Disposal</h5>
+                            <div class="row g-3 ps-3 mb-4">
+                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" name="waste_general" value="True" checked><label class="form-check-label">General Waste</label></div></div>
+                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" name="waste_recycling" value="True"><label class="form-check-label">Recycling</label></div></div>
+                                <div class="col-md-6">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" name="waste_hazardous" id="wasteHazardous" value="True">
+                                        <label class="form-check-label" for="wasteHazardous">Hazardous Waste</label>
+                                    </div>
+                                    <input type="text" class="form-control d-inline-block w-75" name="waste_hazardous_details" placeholder="Specify type if Hazardous">
+                                </div>
+                            </div>
+                            
+                            <h4 class="section-heading">Special Considerations</h4>
+                            <div class="row g-3">
+                                <div class="col-12"><label class="form-label">Are there any areas with restricted access? (Describe area and access requirements)</label><textarea class="form-control" name="restricted_access" rows="2"></textarea></div>
+                                <div class="col-12"><label class="form-label">Pest control needed? (Specify type and location)</label><textarea class="form-control" name="pest_control" rows="2"></textarea></div>
+                            </div>
+
+                            <div class="d-flex justify-content-between mt-4">
+                                <button type="button" class="btn btn-secondary" onclick="goToTab(1)">&laquo; Previous</button>
+                                <button type="button" class="btn btn-primary" onclick="goToTab(3)">Next: Safety & Staffing &raquo;</button>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-3" role="tabpanel">
+                            <h4 class="section-heading">Safety & Maintenance Assessment</h4>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Primary Working Hours</label>
+                                    <input type="text" class="form-control" name="working_hours" placeholder="e.g., 8:00 AM - 5:00 PM">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Required Team Size (Recommendation)</label>
+                                    <input type="number" class="form-control" name="required_team_size" min="0">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Site Access Requirements (e.g., Security clearance, specific times)</label>
+                                    <textarea class="form-control" name="site_access_requirements" rows="2"></textarea>
+                                </div>
+                            </div>
+                            
+                            <h5 class="mt-4 text-success">Maintenance and Equipment</h5>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="facility_equipment_condition" class="form-label">Current Equipment Condition (General)</label>
+                                    <select class="form-select" id="facility_equipment_condition" name="facility_equipment_condition">
+                                        <option value="Excellent">Excellent</option>
+                                        <option value="Good" selected>Good</option>
+                                        <option value="Fair">Fair</option>
+                                        <option value="Poor">Poor</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Required Equipment/Machinery Needed</label>
+                                    <input type="text" class="form-control" name="required_equipment" placeholder="e.g., Scrubber-dryer, high-reach lift">
+                                </div>
+                                <div class="col-12">
+                                    <label for="facility_maintenance_notes" class="form-label">General Maintenance Notes (Water leaks, damage, etc.)</label>
+                                    <textarea class="form-control" id="facility_maintenance_notes" name="facility_maintenance_notes" rows="3"></textarea>
+                                </div>
+                            </div>
+                            
+                            <h5 class="mt-4 text-success">Safety and Risk</h5>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label">High-Risk Areas (Specify)</label>
+                                    <textarea class="form-control" name="high_risk_areas" rows="2" placeholder="e.g., Wet floors in washrooms, uneven pavement in parking"></textarea>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Suggested Safety Measures/PPE</label>
+                                    <input type="text" class="form-control" name="suggested_safety_ppe" placeholder="e.g., Safety cones, harness for external cleaning">
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between mt-4">
+                                <button type="button" class="btn btn-secondary" onclick="goToTab(2)">&laquo; Previous</button>
+                                <button type="button" class="btn btn-primary" onclick="goToTab(4)">Next: Visual Evidence &raquo;</button>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-4" role="tabpanel">
+                            <h4 class="section-heading">Visual Evidence (Upload Photos)</h4>
+                            
+                            <div class="mb-3">
+                                <label for="photo_upload" class="form-label">Upload Images</label>
+                                <input class="form-control" type="file" id="photo_upload" multiple accept="image/*">
+                                <small class="form-text text-muted">Upload one or more photos for the report. Max file size is 5MB per image.</small>
+                            </div>
+
+                            <div id="photo-previews" class="d-flex flex-wrap">
+                            </div>
+                            
+                            <div class="mt-3">
+                                <button type="button" id="clear-photos-btn" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i> Clear All Photos</button>
+                            </div>
+                            
+                            <hr class="my-4">
+                            
+                            <h4 class="section-heading">Summary & General Comments</h4>
+                            <div class="mb-3">
+                                <label for="general_comments" class="form-label">Overall Assessment/General Comments</label>
+                                <textarea class="form-control" id="general_comments" name="general_comments" rows="4" placeholder="Summarize findings and recommendations..."></textarea>
+                            </div>
+
+                            <div class="d-flex justify-content-between mt-4">
+                                <button type="button" class="btn btn-secondary" onclick="goToTab(3)">&laquo; Previous</button>
+                                <button type="button" class="btn btn-primary" onclick="goToTab(5)">Next: Sign-off & Submit &raquo;</button>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-5" role="tabpanel">
+                            <h4 class="section-heading">Sign-off & Submission</h4>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-6 mb-4">
+                                    <label class="form-label">INJAAZ Technician Signature</label>
+                                    <div style="border: 1px solid #ced4da; border-radius: 4px; touch-action: none;">
+                                        <canvas id="tech_signature_canvas" class="w-100" height="150"></canvas>
+                                    </div>
+                                    <input type="text" class="form-control mt-2" name="assessor_name" placeholder="Assessor Name (Printed)" required>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="clearSignature('tech_signature_canvas')"><i class="fas fa-eraser"></i> Clear Signature</button>
+                                </div>
+
+                                <div class="col-md-6 mb-4">
+                                    <label class="form-label">Client Key Person Signature</label>
+                                    <div style="border: 1px solid #ced4da; border-radius: 4px; touch-action: none;">
+                                        <canvas id="contact_signature_canvas" class="w-100" height="150"></canvas>
+                                    </div>
+                                    <input type="text" class="form-control mt-2" name="contact_name" placeholder="Key Contact Name (Printed)" required>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="clearSignature('contact_signature_canvas')"><i class="fas fa-eraser"></i> Clear Signature</button>
+                                </div>
+                            </div>
+                            
+                            <input type="hidden" id="tech_signature_data" name="tech_signature">
+                            <input type="hidden" id="contact_signature_data" name="contact_signature">
+                            
+                            <div class="d-flex justify-content-between mt-4">
+                                <button type="button" class="btn btn-secondary" onclick="goToTab(4)">&laquo; Previous</button>
+                                <button type="submit" class="btn btn-lg btn-success-custom">
+                                    <i class="fas fa-file-download me-2"></i> Generate & Download Reports (PDF & Excel)
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    // Helper function to navigate tabs
+    function goToTab(tabNumber) {
+        const tabLink = document.getElementById(`tab-${tabNumber}-link`);
+        if (tabLink) {
+            new bootstrap.Tab(tabLink).show();
+        }
+    }
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('site-assessment-form');
+        const statusDiv = document.getElementById('status-message');
+        const photoUpload = document.getElementById('photo_upload');
+        const photoPreviews = document.getElementById('photo-previews');
+        const clearPhotosBtn = document.getElementById('clear-photos-btn');
+        let photoBase64 = []; // Array to hold photo base64 strings
+
+        // --- Signature Handling Logic (FIXED) ---
+        const techCanvas = document.getElementById('tech_signature_canvas');
+        const contactCanvas = document.getElementById('contact_signature_canvas');
+        const techSignatureDataInput = document.getElementById('tech_signature_data');
+        const contactSignatureDataInput = document.getElementById('contact_signature_data');
+
+        let techSignaturePad = null;
+        let contactSignaturePad = null;
+        
+        // Function to adjust canvas size for responsiveness and ensure clear state
+        function resizeCanvas() {
+            // Must re-check ratio inside this function in case screen changes
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            
+            // Function to handle a single canvas resizing
+            function setupCanvas(canvas, signaturePad) {
+                if (!signaturePad || canvas.offsetWidth === 0) return; // Skip if canvas is hidden (offsetWidth is 0)
+
+                const data = signaturePad.toData(); 
+                const width = canvas.offsetWidth;
+                const height = canvas.offsetHeight;
+                
+                // Set the canvas dimensions based on the calculated pixel ratio
+                canvas.width = width * ratio;
+                canvas.height = height * ratio;
+                
+                // Scale the drawing context correctly
+                canvas.getContext('2d').scale(ratio, ratio);
+                
+                // Set white background explicitly on the scaled context 
+                canvas.getContext('2d').fillStyle = 'rgb(255, 255, 255)';
+                canvas.getContext('2d').fillRect(0, 0, width, height);
+                
+                // Restore drawing (if any)
+                signaturePad.fromData(data); 
+            }
+
+            // Apply to both pads
+            if (techCanvas) setupCanvas(techCanvas, techSignaturePad);
+            if (contactCanvas) setupCanvas(contactCanvas, contactSignaturePad);
+        }
+        
+        // Initialization must happen AFTER initial dimensions are established
+        if (techCanvas) {
+            techSignaturePad = new SignaturePad(techCanvas, { 
+                backgroundColor: 'rgb(255, 255, 255)', 
+                penColor: 'rgb(0, 0, 0)'
+            });
+        }
+        
+        if (contactCanvas) {
+            contactSignaturePad = new SignaturePad(contactCanvas, { 
+                backgroundColor: 'rgb(255, 255, 255)',
+                penColor: 'rgb(0, 0, 0)'
+            });
+        }
+        
+        // ------------------------------------------------------------------
+        // *** FIX: Call resizeCanvas when the tab becomes visible ***
+        // ------------------------------------------------------------------
+        const tab5Link = document.getElementById('tab-5-link');
+        tab5Link.addEventListener('shown.bs.tab', function (e) {
+            resizeCanvas();
+        });
+        // ------------------------------------------------------------------
+
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // Initial call—will correctly size if Tab 5 is default active, otherwise it runs again on tab click.
+
+        // Global function for clearing signatures (used by the inline onclick)
+        window.clearSignature = function(canvasId) {
+            const ratio = window.devicePixelRatio || 1;
+            let signaturePad = null;
+            if (canvasId === 'tech_signature_canvas') {
+                signaturePad = techSignaturePad;
+            } else if (canvasId === 'contact_signature_canvas') {
+                signaturePad = contactSignaturePad;
+            }
+            
+            if (signaturePad) {
+                signaturePad.clear();
+                // Ensure context scaling is reapplied before filling (in case clear() reset it)
+                const context = signaturePad.canvas.getContext('2d');
+                context.scale(ratio, ratio);
+                
+                // Re-apply white background (using unscaled width/height)
+                context.fillStyle = 'rgb(255, 255, 255)';
+                context.fillRect(0, 0, signaturePad.canvas.offsetWidth, signaturePad.canvas.offsetHeight);
+            }
+        }
+
+
+        // --- Photo Handling Logic (Preserved) ---
+        function renderPhotoPreviews() {
+            photoPreviews.innerHTML = '';
+            photoBase64.forEach((base64, index) => {
+                const container = document.createElement('div');
+                container.className = 'photo-container';
+                
+                const img = document.createElement('img');
+                img.src = base64;
+                img.className = 'image-preview';
+                img.alt = `Photo ${index + 1}`;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'remove-photo';
+                removeBtn.innerHTML = '&times;';
+                removeBtn.addEventListener('click', () => {
+                    photoBase64.splice(index, 1);
+                    renderPhotoPreviews();
+                });
+
+                container.appendChild(img);
+                container.appendChild(removeBtn);
+                photoPreviews.appendChild(container);
+            });
+        }
+
+        photoUpload.addEventListener('change', function(e) {
+            Array.from(e.target.files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    if (file.size > 5 * 1024 * 1024) { 
+                        alert(`Photo "${file.name}" is too large (over 5MB) and was skipped.`);
+                        return;
+                    }
+                    photoBase64.push(event.target.result);
+                    renderPhotoPreviews();
+                };
+                reader.readAsDataURL(file);
+            });
+            e.target.value = ''; 
+        });
+
+        clearPhotosBtn.addEventListener('click', function() {
+            photoBase64 = [];
+            renderPhotoPreviews();
+        });
+
+
+        // --- Submission Logic (Preserved) ---
+
+        // Helper function to initiate file download
+        async function handleFileDownload(response, defaultFilename) {
+            if (response.ok) {
+                const blob = await response.blob();
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = defaultFilename;
+
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename="(.+?)"/);
+                    if (match) {
+                        filename = match[1];
+                    }
+                }
+                
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                const errorText = await response.text();
+                throw new Error(`Server returned error status ${response.status}: ${errorText}`);
+            }
+        }
+
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            // *** PRE-SUBMISSION STEP: CAPTURE SIGNATURES ***
+            if (techSignaturePad && !techSignaturePad.isEmpty()) {
+                techSignatureDataInput.value = techSignaturePad.toDataURL('image/png');
+            } else {
+                techSignatureDataInput.value = '';
+            }
+
+            if (contactSignaturePad && !contactSignaturePad.isEmpty()) {
+                contactSignatureDataInput.value = contactSignaturePad.toDataURL('image/png');
+            } else {
+                contactSignatureDataInput.value = '';
+            }
+
+            // 1. Gather all form data
+            const formData = new FormData(form);
+            const data = {};
+            
+            for (const [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+
+            // Explicitly set unchecked checkboxes to 'false'
+            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                if (!formData.has(checkbox.name)) {
+                    data[checkbox.name] = 'False'; 
+                } else {
+                    data[checkbox.name] = 'True';
+                }
+            });
+            
+            data['photos'] = photoBase64; 
+
+            // 2. Display loading status
+            const submitButton = form.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            statusDiv.className = 'alert alert-info';
+            statusDiv.textContent = 'Submitting form and generating reports...';
+            statusDiv.classList.remove('d-none');
+            
+            try {
+                const postOptions = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                };
+                
+                // 1. Initiate PDF Download
+                statusDiv.textContent = 'Generating PDF report...';
+                const pdfResponse = await fetch('{{ url_for("site_assessment.download_pdf") }}', postOptions);
+                await handleFileDownload(pdfResponse, 'Site_Assessment_Report.pdf');
+                
+                // 2. Initiate Excel Download
+                statusDiv.textContent = 'Generating Excel report...';
+                const excelResponse = await fetch('{{ url_for("site_assessment.download_excel") }}', postOptions);
+                await handleFileDownload(excelResponse, 'Site_Assessment_Data.xlsx');
+
+                statusDiv.className = 'alert alert-success';
+                statusDiv.textContent = 'Success! PDF and Excel reports downloaded separately.';
+                
+            } catch (error) {
+                console.error('Submission failed:', error);
+                statusDiv.className = 'alert alert-danger';
+                statusDiv.textContent = `Error submitting form. One or both downloads failed. Details: ${error.message}`;
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+
+    });
+</script>
+</body>
+</html>

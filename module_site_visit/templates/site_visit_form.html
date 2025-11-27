@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Visit Report Form - INJAAZ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        /* General Styling */
+        body { 
+            background-color: #f4f7f6; /* Light background */
+        }
+        .form-container { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1); 
+        }
+
+        .header-section { 
+            border-bottom: 3px solid #125435; /* Your custom dark green line */
+            padding-bottom: 15px; 
+            margin-bottom: 20px; 
+        }
+        .header-section h2 {
+            text-align: left; /* Ensure title is aligned left */
+        }
+        .logo-side { 
+            max-height: 60px; /* Slightly larger logo for side placement */
+            margin-left: 15px; /* Spacing between logo and title (moved to left side of logo) */
+        }
+        
+        /* Tabs Styling */
+        .nav-tabs .nav-link {
+            color: #125435; /* Dark Green text for tabs */
+            font-weight: bold;
+        }
+        .nav-tabs .nav-link.active {
+            color: white; 
+            background-color: #125435; /* Dark Green background for active tab */
+            border-color: #125435 #125435 white; 
+        }
+
+        /* Report Items List Styling */
+        .report-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            margin-bottom: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .report-item .item-details {
+            flex-grow: 1;
+        }
+        .report-item .item-actions {
+            margin-left: 20px;
+        }
+
+        /* Signature Pad Styling */
+        .signature-pad {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: crosshair;
+            width: 100%;
+            height: 150px;
+            background-color: #fff;
+        }
+        /* Style for invalid input feedback */
+        .form-control.is-invalid, .form-select.is-invalid {
+            border-color: #dc3545;
+            padding-right: calc(1.5em + 0.75rem);
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.8l.2 2.4h-.4z'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right calc(0.375em + 0.1875rem) center;
+            background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="form-container">
+                    <div class="header-section">
+                        <div class="row align-items-center">
+                            <div class="col">
+                                <h2 class="text-dark mb-0">Site Visit Report</h2>
+                            </div>
+                            <div class="col-auto text-end">
+                                <img src="{{ url_for('static', filename='INJAAZ.png') }}" alt="INJAAZ Logo" class="logo-side">
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="visitForm" onsubmit="return false;"> 
+                        <ul class="nav nav-tabs mb-4" id="reportTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="info-tab" data-bs-toggle="tab" data-bs-target="#info-tab-pane" type="button" role="tab" aria-controls="info-tab-pane" aria-selected="true">1. Visit Info</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="report-tab" data-bs-toggle="tab" data-bs-target="#report-tab-pane" type="button" role="tab" aria-controls="report-tab-pane" aria-selected="false">2. Report Items</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary-tab-pane" type="button" role="tab" aria-controls="summary-tab-pane" aria-selected="false">3. Summary & Signatures</button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="reportTabsContent">
+                            <div class="tab-pane fade show active" id="info-tab-pane" role="tabpanel" aria-labelledby="info-tab" tabindex="0">
+                                <h4 class="mb-3 text-secondary">Building and Contact Details</h4>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="building_name" class="form-label">Building Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="building_name" name="building_name" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="building_address" class="form-label">Building Address</label>
+                                        <input type="text" class="form-control" id="building_address" name="building_address">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="contact_person" class="form-label">Contact Person <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="contact_person" name="contact_person" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="contact_number" class="form-label">Contact Number <span class="text-danger">*</span></label>
+                                        <input type="tel" class="form-control" id="contact_number" name="contact_number" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="email" class="form-label">Email Address <span class="text-danger">*</span></label>
+                                        <input type="email" class="form-control" id="email" name="email" required>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label for="technician_name" class="form-label">Technician Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="technician_name" name="technician_name" required>
+                                    </div>
+                                    
+                                    <div class="col-12">
+                                        <label for="opMan_name" class="form-label">Operation Manager Name</label>
+                                        <input type="text" class="form-control" id="opMan_name" name="opMan_name">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="tab-pane fade" id="report-tab-pane" role="tabpanel" aria-labelledby="report-tab" tabindex="0">
+                                <h4 class="mb-3 text-secondary">Add Report Items</h4>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-4">
+                                        <label for="assetSelect" class="form-label">Asset <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="assetSelect" required></select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="systemSelect" class="form-label">System <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="systemSelect" disabled required></select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="descriptionSelect" class="form-label">Description <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="descriptionSelect" disabled required></select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="quantityInput" class="form-label">Quantity</label>
+                                        <input type="number" class="form-control" id="quantityInput" value="1" min="1">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="brandInput" class="form-label">Brand</label>
+                                        <input type="text" class="form-control" id="brandInput" placeholder="Enter Brand/Model">
+                                    </div>
+                                    <div class="col-12">
+                                        <label for="photoInput" class="form-label">Add Photos</label>
+                                        <input type="file" class="form-control" id="photoInput" accept="image/*" multiple> 
+                                    </div>
+                                    <div class="col-12">
+                                        <label for="commentsTextarea" class="form-label">Comments</label>
+                                        <textarea class="form-control" id="commentsTextarea" rows="2"></textarea>
+                                    </div>
+                                    <div class="col-12 text-end">
+                                        <button type="button" class="btn btn-primary" id="addItemButton"><i class="fas fa-plus me-2"></i>Add Item</button>
+                                    </div>
+                                </div>
+
+                                <h5 class="mb-3 text-secondary">Pending Report List</h5>
+                                <div id="pendingItemsList" class="border p-3 rounded bg-light">
+                                    <p class="text-muted text-center" id="emptyListMessage">No report items added yet.</p>
+                                </div>
+                            </div>
+
+                            <div class="tab-pane fade" id="summary-tab-pane" role="tabpanel" aria-labelledby="summary-tab" tabindex="0">
+                                <h4 class="mb-3 text-secondary">Client and Technician Signatures</h4>
+                                
+                                <input type="hidden" id="techSignatureData" name="tech_signature">
+                                <input type="hidden" id="opManSignatureData" name="opMan_signature">
+
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="card p-3 h-100">
+                                            <h6 class="card-title">Technician Signature</h6>
+                                            <canvas id="techSignaturePad" class="signature-pad"></canvas>
+                                            <div class="mt-2 d-flex justify-content-between">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearTech()">Clear</button>
+                                                <span class="text-muted" id="techNameDisplay">Technician Name</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="card p-3 h-100">
+                                            <h6 class="card-title">Operation Manager Signature</h6>
+                                            <canvas id="opManSignaturePad" class="signature-pad"></canvas>
+                                            <div class="mt-2 d-flex justify-content-between">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearOpMan()">Clear</button>
+                                                <span class="text-muted" id="opManNameDisplay">Operation Manager Name</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    <h4 class="text-secondary">Submission Status</h4>
+                                    <p id="status" class="lead fw-bold text-dark">Ready to Submit.</p>
+                                    <div id="submission-alert" class="alert d-none" role="alert"></div> 
+                                    <div id="downloadArea" class="mt-3">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mt-4">
+                            <button type="button" class="btn btn-secondary" id="prevButton"><i class="fas fa-arrow-left me-2"></i>Previous Page</button>
+                            <button type="button" class="btn btn-success" id="nextButton">Next Page<i class="fas fa-arrow-right ms-2"></i></button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="customAlertModal" tabindex="-1" aria-labelledby="customAlertTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-start border-5 border-info">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title d-flex align-items-center" id="customAlertTitle">
+                        <i class="fas fa-2x me-3 fa-circle-info text-info" id="customAlertIcon"></i>
+                        Notification Title
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="customAlertBody">
+                    Notification Message Body.
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script> 
+    <script src="{{ url_for('static', filename='dropdown_data.js') }}"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+
+
+    <script>
+        // FIX: Define the correct submission URL using the Flask Blueprint endpoint
+        const SUBMIT_URL = "{{ url_for('site_visit_bp.submit') }}";
+        
+        // --- Tab Navigation and Submission Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabList = document.getElementById('reportTabs');
+            const navTabs = Array.from(document.querySelectorAll('.nav-tabs .nav-link'));
+            const prevButton = document.getElementById('prevButton');
+            const nextButton = document.getElementById('nextButton');
+
+            const techCanvas = document.getElementById('techSignaturePad');
+            const opManCanvas = document.getElementById('opManSignaturePad');
+            
+            // FIX: Refined resizeCanvas to ensure data is not lost on resize
+            function resizeCanvas() {
+                const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                
+                // Tech Pad
+                if (window.techPad) {
+                    const data = window.techPad.isEmpty() ? '' : window.techPad.toDataURL(); 
+                    techCanvas.width = techCanvas.offsetWidth * ratio;
+                    techCanvas.height = techCanvas.offsetHeight * ratio;
+                    techCanvas.getContext("2d").scale(ratio, ratio);
+                    if (data) window.techPad.fromDataURL(data); 
+                    else window.techPad.clear();
+                }
+
+                // OpMan Pad
+                if (window.opManPad) {
+                    const data = window.opManPad.isEmpty() ? '' : window.opManPad.toDataURL(); 
+                    opManCanvas.width = opManCanvas.offsetWidth * ratio;
+                    opManCanvas.height = opManCanvas.offsetHeight * ratio;
+                    opManCanvas.getContext("2d").scale(ratio, ratio);
+                    if (data) window.opManPad.fromDataURL(data); 
+                    else window.opManPad.clear();
+                }
+            }
+            
+            tabList.addEventListener('shown.bs.tab', resizeCanvas);
+            window.addEventListener('resize', resizeCanvas);
+            setTimeout(resizeCanvas, 100); 
+
+            // --- Validation Logic for Navigation - FIXED FOR TAB 2 ---
+            function validateCurrentTab(activeIndex) {
+                let isValid = true;
+                let tabPaneId = navTabs[activeIndex].getAttribute('data-bs-target');
+                const formInputs = document.querySelectorAll(`${tabPaneId} [required]`);
+                
+                // TAB 1: Visit Info (Index 0)
+                if (activeIndex === 0) {
+                    formInputs.forEach(input => {
+                        // Check validity for all required inputs (text, email, select)
+                        if (!input.checkValidity() || !input.value.trim()) {
+                            input.classList.add('is-invalid');
+                            isValid = false;
+                        } else {
+                            input.classList.remove('is-invalid');
+                        }
+                    });
+                    
+                    if (!isValid) {
+                        // Use a notification defined in main.js
+                        if (typeof window.showNotification === 'function') {
+                            window.showNotification('error', 'Validation Error', 'Please fill in all required fields marked with **\*** before proceeding.');
+                        } else {
+                            alert('Please fill in all required fields marked with * before proceeding.');
+                        }
+                    }
+                    return isValid;
+                }
+                
+                // TAB 2: Report Items (Index 1) - Check if at least one item has been added
+                if (activeIndex === 1) {
+                    // window.pendingItems is defined in main.js
+                    if (window.pendingItems.length === 0) {
+                        if (typeof window.showNotification === 'function') {
+                            window.showNotification('warning', 'Missing Items', 'Please add at least **one Report Item** before proceeding to the Summary.');
+                        } else {
+                            alert('Please add at least one item to the report list before proceeding.');
+                        }
+                        return false;
+                    }
+                    return true;
+                }
+                
+                // TAB 3: Summary & Signatures (Index 2) - Validation handled by onSubmit
+                return true;
+            }
+
+            // --- Button Text Update Logic and Navigation... (omitted for brevity, assume correct) ---
+            function updateButtonForTab() {
+                const activeTab = document.querySelector('.nav-tabs .nav-link.active');
+                if (!activeTab) return;
+                
+                const activeIndex = navTabs.indexOf(activeTab);
+
+                // Update Name Displays
+                const technicianName = document.getElementById('technician_name').value;
+                const opManName = document.getElementById('opMan_name').value;
+                document.getElementById('techNameDisplay').textContent = technicianName || 'Technician Name';
+                document.getElementById('opManNameDisplay').textContent = opManName || 'Operation Manager Name';
+
+                prevButton.disabled = activeIndex === 0;
+
+                if (activeIndex === navTabs.length - 1) {
+                    nextButton.textContent = 'Submit Report';
+                    nextButton.classList.remove('btn-success');
+                    nextButton.classList.add('btn-primary');
+                } else {
+                    nextButton.classList.remove('btn-primary');
+                    nextButton.classList.add('btn-success');
+                    nextButton.innerHTML = 'Next Page<i class="fas fa-arrow-right ms-2"></i>';
+                }
+            }
+
+            // --- Navigation and Submission Logic ---
+            prevButton.addEventListener('click', () => {
+                const activeTab = document.querySelector('.nav-tabs .nav-link.active');
+                if (!activeTab) return;
+
+                const activeIndex = navTabs.indexOf(activeTab);
+                if (activeIndex > 0) {
+                    const prevTabButton = navTabs[activeIndex - 1];
+                    new bootstrap.Tab(prevTabButton).show();
+                }
+            });
+
+            nextButton.addEventListener('click', () => {
+                const activeTab = document.querySelector('.nav-tabs .nav-link.active');
+                if (!activeTab) return;
+
+                const activeIndex = navTabs.indexOf(activeTab);
+                
+                // Step 1: Validation
+                if (activeIndex < navTabs.length - 1 && !validateCurrentTab(activeIndex)) {
+                    return;
+                }
+                
+                if (activeIndex < navTabs.length - 1) {
+                    // Step 2: Go to the next tab
+                    const nextTabButton = navTabs[activeIndex + 1];
+                    new bootstrap.Tab(nextTabButton).show();
+                } else {
+                    // Step 3: Submission (Last Tab)
+                    
+                    // Capture signature data (base64) into the hidden input fields
+                    if (window.techPad) {
+                        document.getElementById('techSignatureData').value = window.techPad.isEmpty() ? '' : window.techPad.toDataURL('image/png');
+                    }
+                    if (window.opManPad) {
+                        document.getElementById('opManSignatureData').value = window.opManPad.isEmpty() ? '' : window.opManPad.toDataURL('image/png');
+                    }
+                    
+                    // Call the onSubmit function defined in main.js
+                    if (typeof window.onSubmit === 'function') {
+                        // FIX: Ensure alert div is visible before submission attempt
+                        const alertDiv = document.getElementById('submission-alert');
+                        alertDiv.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning');
+                        alertDiv.classList.add('alert-info');
+                        alertDiv.textContent = 'Preparing report for submission...';
+                        window.onSubmit(new Event('click')); 
+                    } else {
+                        console.error("Submission function (onSubmit) not found.");
+                    }
+                }
+            });
+
+            tabList.addEventListener('shown.bs.tab', updateButtonForTab);
+            updateButtonForTab();
+        });
+
+        // --- Global functions for clearing signatures (Called from buttons in HTML) ---
+        window.clearTech = () => {
+            if (window.techPad) window.techPad.clear();
+            document.getElementById('techSignatureData').value = '';
+        }
+        window.clearOpMan = () => {
+            if (window.opManPad) window.opManPad.clear();
+            document.getElementById('opManSignatureData').value = '';
+        }
+    </script>
+</body>
+</html>
