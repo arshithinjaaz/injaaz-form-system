@@ -13,4 +13,4 @@ COPY . .
 
 # Tell the cloud how to run your app, using gunicorn to start Injaaz.py
 # The command is: gunicorn [file_name_without_.py]:[flask_app_variable]
-CMD exec gunicorn Injaaz:app -b 0.0.0.0:$PORT}$$
+CMD exec gunicorn Injaaz:app -b 0.0.0.0:$PORT
