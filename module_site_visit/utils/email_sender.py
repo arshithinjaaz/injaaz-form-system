@@ -1,60 +1,75 @@
-import pythoncom
-import win32com.client as win32
+# module_site_visit/utils/email_sender.py
+
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 # --- HARDCODED RECIPIENT LIST (The only addresses that receive the email) ---
 INTERNAL_RECIPIENTS = ["arshith@injaaz.ae"]
-# Note: You can add as many addresses as you need to this list.
 # -----------------------------------------------------------------------------
 
+# --- CONFIGURATION (Reads secure credentials from Render Environment Variables) ---
+# IMPORTANT: You MUST set these three variables in your Render Environment dashboard.
+SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.office365.com") # Example for Office 365
+SMTP_PORT = int(os.environ.get("SMTP_PORT", 587)) 
+SMTP_USERNAME = os.environ.get("SMTP_USERNAME") # Your sender email (e.g., info@yourdomain.com)
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD") # The App Password for the sender email
+# --------------------------------------------------------------------------------
 
 def send_outlook_email(subject, body, attachments=None, to_address=None):
     """
-    Sends Outlook email ONLY to the hardcoded INTERNAL_RECIPIENTS list.
-    The client's address (to_address) is ignored for sending but is used 
+    Sends email via SMTP (cross-platform) to INTERNAL_RECIPIENTS.
+    The client's address (to_address) is ignored for primary sending but is used 
     to add context to the email body.
     """
+    if not SMTP_USERNAME or not SMTP_PASSWORD:
+        error_msg = "SMTP credentials (USERNAME/PASSWORD) are missing in Render environment variables."
+        print(f"ERROR: {error_msg}")
+        return False, error_msg
 
     try:
-        pythoncom.CoInitialize() 
+        # Create a multipart message object
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_USERNAME
+        msg['To'] = "; ".join(INTERNAL_RECIPIENTS)
+        msg['Subject'] = subject
 
-        # --- Recipient String Creation ---
-        # Join all internal emails into a semicolon-separated string for Outlook
-        internal_to_string = "; ".join(INTERNAL_RECIPIENTS)
-
-        # --- Outlook Object Creation ---
-        outlook = win32.Dispatch("Outlook.Application")
-        mail = outlook.CreateItem(0)
-
-        # Set the main recipient to the internal list
-        mail.To = internal_to_string 
-        
-        # We can append the client's email to the body so the internal team knows 
-        # who was meant to receive it.
+        # Append client info to the body for context (since we're only emailing internally)
         client_email_info = f"\nClient Email (For Reference): {to_address if to_address and to_address.strip() else 'N/A'}"
+        full_body = body + client_email_info
         
-        mail.Subject = subject
-        mail.Body = body + client_email_info # Append client email reference
-        # mail.CC is left empty
+        # Attach the body text
+        msg.attach(MIMEText(full_body, 'plain'))
 
         # Handle attachments list
         if attachments:
             for file_path in attachments:
                 if os.path.exists(file_path):
-                    try:
-                        mail.Attachments.Add(file_path)
-                    except Exception as e:
-                        print(f"Attachment failed: {file_path} -> {e}")
+                    part = MIMEBase('application', 'octet-stream')
+                    with open(file_path, 'rb') as file:
+                        part.set_payload(file.read())
+                    encoders.encode_base64(part)
+                    part.add_header('Content-Disposition', f'attachment; filename="{os.path.basename(file_path)}"')
+                    msg.attach(part)
                 else:
                     print(f"Attachment file not found: {file_path}")
 
-        # mail.Display() # Use this to test if the recipient list works
-        mail.Send()
+        # Connect to the SMTP Server
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()  # Upgrade connection to secure TLS
+        server.login(SMTP_USERNAME, SMTP_PASSWORD)
         
-        return True, f"Email sent successfully to internal list: {internal_to_string}."
+        # Send the email
+        text = msg.as_string()
+        server.sendmail(SMTP_USERNAME, INTERNAL_RECIPIENTS, text)
+        server.quit()
+        
+        return True, f"Email sent successfully via SMTP to internal list: {msg['To']}."
 
     except Exception as e:
-        return False, f"Email sending failed (Outlook error): {e}"
-
-    finally:
-        pythoncom.CoUninitialize()
+        error_msg = f"Email sending failed (SMTP error): {e}"
+        print(f"ERROR: {error_msg}")
+        return False, error_msg
