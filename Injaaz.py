@@ -11,6 +11,9 @@ from module_site_visit.routes import site_visit_bp
 # This module was created in the previous step ('module_site_assessment/routes.py')
 from module_site_assessment.routes import site_assessment_bp
 
+# 3. Import the Blueprint object for Form 3 (New Site Civil Report)
+from module_site_civil.routes import site_civil_bp
+
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GENERATED_DIR_NAME = "generated"
@@ -29,6 +32,9 @@ app.register_blueprint(site_visit_bp, url_prefix='/site-visit')
 
 # Register Blueprint for Form 2 (New Site Assessment)
 app.register_blueprint(site_assessment_bp, url_prefix='/site-assessment')
+
+# Register Blueprint for Form 3 (New Site Civil Report)
+app.register_blueprint(site_civil_bp, url_prefix='/site-civil')
 
 # --- Root Route Renders Dashboard ---
 @app.route('/')
