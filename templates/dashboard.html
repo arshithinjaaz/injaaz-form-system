@@ -3,159 +3,205 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>INJAAZ Dashboard - Glassmorphism</title>
+    <title>INJAAZ Dashboard - Brand Theme</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     
     <style>
-        /* Define Glassmorphism / Full-Width Colors */
+        /* Define INJAAZ Brand Theme Colors */
         :root {
-            --glass-bg: #f4f7f6; /* Very light background */
-            --glass-primary: #1e3799; /* Deep Blue (Main brand color) */
-            --glass-accent: #ff6b81; /* Bright Pink/Coral Accent */
-            --glass-card-bg: rgba(255, 255, 255, 0.85); /* Semi-transparent white */
-            --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            --injaaz-brand-green: #125435; /* Primary Green from your form */
+            --injaaz-light-grey: #f4f7f6; /* Background grey from your form */
+            --injaaz-dark-text: #343a40; /* Darker text for readability */
+            --injaaz-medium-text: #6c757d; /* Muted text */
+            --injaaz-border-light: #e9ecef; /* Light border color */
+            --injaaz-shadow: 0 4px 10px rgba(0, 0, 0, 0.06); /* Subtle shadow */
         }
         
         body { 
-            background: linear-gradient(135deg, #f0f4f8, #c8d0d9); /* Subtle gradient background */
+            background-color: var(--injaaz-light-grey); 
             min-height: 100vh;
-            font-family: 'Poppins', sans-serif; /* Modern, clean font */
-            color: var(--glass-primary);
+            font-family: 'Segoe UI', Arial, sans-serif; /* Clean, professional font */
+            color: var(--injaaz-dark-text);
         }
 
-        /* Full-Width Navigation Bar (Replaces Sidebar) */
-        #navbar-top {
-            background: var(--glass-card-bg); /* Semi-transparent */
-            backdrop-filter: blur(10px); /* The Glassmorphism effect */
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            position: sticky;
+        /* Sidebar Styling (Matching the brand green) */
+        #sidebar {
+            width: 250px;
+            min-height: 100vh;
+            background-color: var(--injaaz-brand-green);
+            color: white;
+            position: fixed;
             top: 0;
-            z-index: 1020;
-            padding: 10px 40px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.3); /* Subtle light border */
+            left: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
         }
-        #navbar-top .navbar-brand {
+        #sidebar .sidebar-heading {
+            padding: 2rem 1rem 1.5rem; 
+            font-size: 1.2rem;
             font-weight: 700;
-            font-size: 1.5rem;
-            color: var(--glass-primary);
-        }
-        #navbar-top .nav-link {
-            color: var(--glass-primary) !important;
-            font-weight: 500;
-            margin: 0 10px;
-            border-bottom: 3px solid transparent;
-            transition: border-color 0.3s;
-        }
-        #navbar-top .nav-link:hover, #navbar-top .nav-link.active {
-            color: var(--glass-accent) !important;
-            border-color: var(--glass-accent);
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.1); 
+            display: flex; 
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
         
-        /* Main Content Styling (Full width used now) */
+        /* Sidebar Links */
+        #sidebar .list-group-item {
+            background-color: var(--injaaz-brand-green);
+            color: rgba(255, 255, 255, 0.85); /* Slightly muted white */
+            border: none;
+            padding: 15px 20px;
+            transition: background-color 0.2s, color 0.2s;
+            font-weight: 500;
+        }
+        #sidebar .list-group-item:hover {
+            background-color: #0d3824; /* Slightly darker green on hover */
+            color: white;
+        }
+        #sidebar .list-group-item.active {
+            background-color: #0d3824; /* Darker green for active state */
+            color: white;
+            font-weight: 700;
+            border-radius: 0;
+            position: relative;
+        }
+        #sidebar .list-group-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: white; /* White bar for active indicator */
+        }
+        
+        /* Main Content Styling */
         #page-content-wrapper {
-            margin-left: 0; 
-            padding: 40px 60px; /* More horizontal padding */
+            margin-left: 250px; 
+            padding: 40px; 
             flex-grow: 1;
         }
         #content-wrapper {
-            max-width: 1400px;
-            margin: 0 auto; /* Center content */
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
-        /* --- GLASSMORHISM CARD STYLING --- */
+        /* --- CARD STYLING (Clean and Professional) --- */
         .report-card {
-            background: var(--glass-card-bg); 
-            border-radius: 16px; 
-            padding: 40px; /* Generous padding */
-            /* Glassmorphism shadow and light background */
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.2); 
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            transition: all 0.3s ease-in-out;
+            background: white;
+            border-radius: 8px; 
+            padding: 30px; 
+            box-shadow: var(--injaaz-shadow); 
+            border: var(--injaaz-border-light); 
+            transition: all 0.3s;
             text-decoration: none;
-            color: var(--glass-primary);
+            color: var(--injaaz-dark-text);
             height: 100%; 
             display: flex;
             flex-direction: column;
             justify-content: space-between;
         }
         .report-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 40px 0 rgba(31, 38, 135, 0.3); 
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
         }
         .card-icon {
-            font-size: 3.5rem;
-            margin-bottom: 25px;
-            color: var(--glass-accent); /* Bright accent for focus */
+            font-size: 3rem; 
+            margin-bottom: 20px;
+            color: var(--injaaz-brand-green); /* Use brand green for icons */
         }
         .card-title {
-            font-weight: 800; /* Extra bold title */
-            font-size: 1.6rem;
+            font-weight: 700; 
+            font-size: 1.4rem;
             margin-bottom: 10px;
         }
         .card-text {
-            color: #5f6368;
-            font-size: 1.1rem;
+            color: var(--injaaz-medium-text);
+            font-size: 1rem;
         }
         .card-footer-text {
-            font-size: 1.1rem;
-            color: var(--glass-primary); 
+            font-size: 1rem;
+            color: var(--injaaz-brand-green); 
             font-weight: 600;
-            margin-top: 30px;
+            margin-top: 20px;
         }
-        /* --- HEADING STYLE (Large, modern) --- */
+        /* --- HEADING STYLE (Clean and readable) --- */
         #content-wrapper h1 {
-            font-weight: 800; 
-            font-size: 4rem;
+            font-weight: 700; 
+            font-size: 3rem;
             margin-bottom: 0.5rem !important;
-            color: var(--glass-primary);
+            color: var(--injaaz-dark-text);
         }
         #content-wrapper .lead {
-             font-size: 1.5rem;
-             color: #5f6368;
+             font-size: 1.2rem;
+             color: var(--injaaz-medium-text);
         }
 
         /* Responsive adjustments */
         @media (max-width: 768px) {
-            #page-content-wrapper {
-                padding: 20px;
-                padding-top: 80px;
+            #sidebar {
+                margin-left: -250px; /* Hide sidebar by default on mobile */
             }
-            #navbar-top {
-                padding: 10px 20px;
+            .toggled #sidebar {
+                margin-left: 0; /* Show sidebar when toggled */
+            }
+            #page-content-wrapper {
+                margin-left: 0;
+                padding: 20px;
+                padding-top: 60px; /* Account for mobile navbar */
+            }
+            .navbar {
+                background-color: var(--injaaz-brand-green); /* Mobile navbar also green */
+            }
+            .navbar-brand {
+                color: white;
             }
         }
     </style>
 </head>
 <body>
 
-<div class="d-flex flex-column" id="wrapper">
+<div class="d-flex" id="wrapper">
     
-    <nav class="navbar navbar-expand-lg" id="navbar-top">
-        <span class="navbar-brand">INJAAZ SYSTEM</span>
-        
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link active" aria-current="page" href="#"><i class="fas fa-th-large me-2"></i> Dashboard</a>
-                <a class="nav-link" href="{{ url_for('site_visit_bp.index') }}"><i class="fas fa-tools me-2"></i> HVAC & MEP</a>
-                <a class="nav-link" href="{{ url_for('site_assessment.index') }}"><i class="fas fa-broom me-2"></i> Cleaning Report</a>
-                <a class="nav-link disabled" tabindex="-1" aria-disabled="true"><i class="fas fa-chart-bar me-2"></i> Analytics (Soon)</a>
-            </div>
+    <div id="sidebar">
+        <div class="sidebar-heading">
+            <img src="{{ url_for('static', filename='INJAAZ.png') }}" alt="INJAAZ Logo" class="sidebar-logo" style="max-height: 150px; width: auto; margin-bottom: 10px; border-radius: 4px;">
+            <span>INJAAZ SYSTEM</span>
         </div>
-    </nav>
-    
+        <div class="list-group list-group-flush">
+            <a href="#" class="list-group-item list-group-item-action active">
+                <i class="fas fa-th-large me-3"></i> Dashboard
+            </a>
+            <a href="{{ url_for('site_visit_bp.index') }}" class="list-group-item list-group-item-action">
+                <i class="fas fa-tools me-3"></i> HVAC & MEP Report
+            </a>
+            <a href="{{ url_for('site_assessment.index') }}" class="list-group-item list-group-item-action">
+                <i class="fas fa-broom me-3"></i> Cleaning Report
+            </a>
+            <a href="#" class="list-group-item list-group-item-action disabled" tabindex="-1" aria-disabled="true">
+                <i class="fas fa-chart-bar me-3"></i> Analytics (Soon)
+            </a>
+        </div>
+    </div>
     <div id="page-content-wrapper" class="w-100">
+        
+        <nav class="navbar navbar-expand-lg navbar-dark border-bottom fixed-top d-md-none">
+            <button class="btn btn-primary" id="sidebarToggle" style="background-color: white; border: none; color: var(--injaaz-brand-green);">
+                <i class="fas fa-bars"></i>
+            </button>
+            <span class="navbar-brand ms-3">INJAAZ</span>
+        </nav>
         
         <div id="content-wrapper">
             <h1 class="mt-4 mb-0">Launchpad</h1> 
-            <p class="lead mb-5">Quick access to all available report generation forms and tools.</p>
+            <p class="lead mb-5">Quick access to all available report generation forms.</p>
 
-            <div class="row g-5">
+            <div class="row g-4">
                 
                 <div class="col-sm-6 col-lg-4">
                     <a href="{{ url_for('site_visit_bp.index') }}" class="report-card">
@@ -180,7 +226,7 @@
                 </div>
 
                 <div class="col-sm-6 col-lg-4">
-                    <div class="report-card" style="background-color: rgba(230, 230, 230, 0.8); cursor: not-allowed; opacity: 0.7;">
+                    <div class="report-card" style="background-color: #fcfcfc; cursor: not-allowed; opacity: 0.7;">
                         <div>
                             <i class="fas fa-chart-bar card-icon" style="color: #95a5a6;"></i>
                             <h5 class="card-title" style="color: #95a5a6;">Analytics Dashboard</h5>
@@ -196,7 +242,9 @@
     </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Note: The toggle script is removed as the sidebar is gone, replaced by standard Bootstrap navbar collapse.
+    document.getElementById("sidebarToggle").addEventListener("click", function() {
+        document.getElementById("wrapper").classList.toggle("toggled");
+    });
 </script>
 </body>
 </html>
