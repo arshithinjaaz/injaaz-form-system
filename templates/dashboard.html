@@ -10,22 +10,25 @@
     <style>
         /* Define INJAAZ brand color */
         :root {
-            --injaaz-primary: #125435; /* Dark Green */
-            --injaaz-secondary: #f4f7f6; /* Light Grey Background (iOS light grey) */
-            --injaaz-accent: #007aff; /* iOS Blue/Teal Accent */
+            --injaaz-primary: #0A3D62; /* Deep Navy Blue (Corporate feel) */
+            --injaaz-secondary: #f8f9fa; /* Very Light Grey Background */
+            --injaaz-accent: #00A86B; /* Emerald Green (New Accent) */
+            --shadow-light: 0 4px 15px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.15);
         }
         
         body { 
             background-color: var(--injaaz-secondary); 
             min-height: 100vh;
             overflow-x: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
 
-        /* Sidebar Styling */
+        /* Sidebar Styling (Keeping original color for branding) */
         #sidebar {
             width: 250px;
             min-height: 100vh;
-            background-color: var(--injaaz-primary);
+            background-color: #125435; /* Dark Green - Kept from original */
             color: white;
             position: fixed;
             top: 0;
@@ -39,24 +42,16 @@
             font-size: 1.2rem;
             font-weight: bold;
             text-align: center;
-            background-color: rgba(0, 0, 0, 0.1); 
+            background-color: rgba(0, 0, 0, 0.15); 
             display: flex; 
             flex-direction: column;
             align-items: center;
             justify-content: center;
         }
         
-        /* New Logo Styling */
-        .sidebar-logo {
-            max-height: 150px;
-            width: auto;
-            margin-bottom: 10px;
-            border-radius: 4px; 
-        }
-
         /* Sidebar Links */
         #sidebar .list-group-item {
-            background-color: var(--injaaz-primary);
+            background-color: #125435;
             color: white;
             border: none;
             padding: 15px 20px;
@@ -67,50 +62,24 @@
             color: white;
         }
         #sidebar .list-group-item.active {
-            background-color: var(--injaaz-accent); 
+            background-color: var(--injaaz-accent); /* Highlight with Emerald Green */
             font-weight: bold;
             border-radius: 0;
         }
         
-        /* Main Content Styling (Desktop) */
+        /* Main Content Styling */
         #page-content-wrapper {
             margin-left: 250px; 
-            padding: 30px;
+            padding: 40px; /* More padding for cleaner look */
             flex-grow: 1;
         }
 
-        /* --- New Styling for Sidebar Toggling --- */
-        .toggled #sidebar {
-            margin-left: -250px;
-        }
-
-        /* --- MEDIA QUERY for Mobile Responsiveness --- */
-        @media (max-width: 768px) {
-            #sidebar {
-                margin-left: -250px;
-            }
-            .toggled #sidebar {
-                margin-left: 0;
-            }
-            #page-content-wrapper {
-                margin-left: 0;
-                padding-top: 60px; 
-            }
-        }
-        
-        /* Navbar styling for mobile button */
-        .navbar {
-            background-color: var(--injaaz-primary);
-        }
-
-        /* --- APP STORE CARD STYLING (MODIFIED) --- */
+        /* --- MODERN CARD STYLING --- */
         .report-card {
             background: white;
-            /* Increased radius for App Store/iOS look */
-            border-radius: 20px; 
-            padding: 25px;
-            /* Deeper, more noticeable shadow for card elevation */
-            box-shadow: 0 8px 25px rgba(0,0,0,0.08); 
+            border-radius: 16px; /* Slightly less rounded than App Store for a modern look */
+            padding: 30px; /* More padding inside the card */
+            box-shadow: var(--shadow-light); 
             transition: all 0.3s;
             text-decoration: none;
             color: #333;
@@ -118,34 +87,50 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            /* Remove the distracting side border */
-            border: none !important; 
+            border: 1px solid #e9ecef; /* Subtle border for separation */
         }
         .report-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+            transform: translateY(-4px); /* Lift higher on hover */
+            box-shadow: var(--shadow-hover);
         }
         .card-icon {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
+            font-size: 3rem; /* Larger icon */
+            margin-bottom: 15px;
+            color: var(--injaaz-primary); /* Use primary brand color for icons */
         }
         .card-title {
-            font-weight: 600;
-            font-size: 1.2rem;
+            font-weight: 700; /* Bolder title */
+            font-size: 1.3rem;
+            margin-bottom: 5px;
+        }
+        .card-text {
+            color: #6c757d;
         }
         .card-footer-text {
-            font-size: 0.85rem;
-            color: #6c757d;
-            margin-top: 10px;
+            font-size: 0.9rem;
+            color: var(--injaaz-accent); /* Use accent color for "Launch Form" */
+            font-weight: 600;
+            margin-top: 20px;
         }
-        /* Style for the large iOS-style heading */
+        /* --- LARGE HEADING STYLE --- */
         #content-wrapper h1 {
-            font-weight: 800; 
-            font-size: 2.5rem;
+            font-weight: 900; /* Extra bold heading */
+            font-size: 3rem;
             margin-bottom: 0.5rem !important;
+            color: #343a40;
         }
         #content-wrapper .lead {
-             font-size: 1.2rem;
+             font-size: 1.3rem;
+             color: #6c757d;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            #page-content-wrapper {
+                margin-left: 0;
+                padding: 20px;
+                padding-top: 60px;
+            }
         }
     </style>
 </head>
@@ -155,7 +140,7 @@
     
     <div id="sidebar">
         <div class="sidebar-heading">
-            <img src="{{ url_for('static', filename='INJAAZ.png') }}" alt="INJAAZ Logo" class="sidebar-logo">
+            <img src="{{ url_for('static', filename='INJAAZ.png') }}" alt="INJAAZ Logo" class="sidebar-logo" style="max-height: 150px; width: auto; margin-bottom: 10px; border-radius: 4px;">
             <span>Injaaz System</span>
         </div>
         <div class="list-group list-group-flush">
@@ -175,7 +160,7 @@
     </div>
     <div id="page-content-wrapper" class="w-100">
         
-        <nav class="navbar navbar-expand-lg navbar-dark border-bottom fixed-top d-md-none">
+        <nav class="navbar navbar-expand-lg navbar-dark border-bottom fixed-top d-md-none" style="background-color: #125435;">
             <button class="btn btn-primary" id="sidebarToggle" style="background-color: var(--injaaz-accent); border: none;">
                 <i class="fas fa-bars"></i>
             </button>
@@ -183,17 +168,17 @@
         </nav>
         
         <div id="content-wrapper">
-            <h1 class="mt-4 text-dark mb-0" style="font-weight: 800; font-size: 2.5rem;">Launchpad</h1> 
-            <p class="lead text-muted mb-5" style="font-size: 1.2rem;">Quick access to all available reports.</p>
+            <h1 class="mt-4 mb-0">Launchpad</h1> 
+            <p class="lead mb-5">Quick access to all available report generation forms.</p>
 
             <div class="row g-4">
                 
                 <div class="col-sm-6 col-lg-4">
                     <a href="{{ url_for('site_visit_bp.index') }}" class="report-card">
                         <div>
-                            <i class="fas fa-tools card-icon text-success" style="color: var(--injaaz-primary) !important;"></i>
+                            <i class="fas fa-tools card-icon"></i>
                             <h5 class="card-title">Site Visit Report - HVAC & MEP</h5>
-                            <p class="card-text text-muted">Generate comprehensive reports for Mechanical, Electrical, and Plumbing work.</p>
+                            <p class="card-text">Generate comprehensive reports for Mechanical, Electrical, and Plumbing work.</p>
                         </div>
                         <p class="card-footer-text text-end">Launch Form <i class="fas fa-arrow-right ms-2"></i></p>
                     </a>
@@ -202,22 +187,22 @@
                 <div class="col-sm-6 col-lg-4">
                     <a href="{{ url_for('site_assessment.index') }}" class="report-card">
                         <div>
-                            <i class="fas fa-broom card-icon text-info"></i>
+                            <i class="fas fa-broom card-icon"></i>
                             <h5 class="card-title">Site Visit Report - Cleaning</h5>
-                            <p class="card-text text-muted">Log cleaning and site assessment details for quality assurance and compliance.</p>
+                            <p class="card-text">Log cleaning and site assessment details for quality assurance and compliance.</p>
                         </div>
                         <p class="card-footer-text text-end">Launch Form <i class="fas fa-arrow-right ms-2"></i></p>
                     </a>
                 </div>
 
                 <div class="col-sm-6 col-lg-4">
-                    <div class="report-card bg-light text-muted">
+                    <div class="report-card bg-light text-muted" style="cursor: not-allowed;">
                         <div>
-                            <i class="fas fa-chart-bar card-icon text-secondary"></i>
+                            <i class="fas fa-chart-bar card-icon" style="color: #adb5bd;"></i>
                             <h5 class="card-title">Analytics Dashboard</h5>
                             <p class="card-text">View trends, KPI metrics, and summary data from submitted reports.</p>
                         </div>
-                        <p class="card-footer-text text-end">Feature Coming Soon</p>
+                        <p class="card-footer-text text-end" style="color: #adb5bd;">Feature Coming Soon</p>
                     </div>
                 </div>
 
