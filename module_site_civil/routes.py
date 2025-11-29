@@ -3,17 +3,21 @@
 import os
 from flask import Blueprint, render_template, request, url_for, redirect, jsonify
 
+# 1. IMPORT the report generation functions from the placeholder files.
+# This fixes the 500 error by satisfying the application's required structure.
+from .site_civil_excel import create_excel_report 
+from .site_civil_pdf import create_pdf_report 
+
 # Define the Blueprint for the Civil module
 site_civil_bp = Blueprint('site_civil_bp', __name__)
 
-# --- Route to Render the Form ---
+# --- Route to Render the Form (e.g., /site-civil/) ---
 @site_civil_bp.route('/', methods=['GET'])
 def index():
     """Renders the Site Visit Civil Report Form."""
-    # Renders the HTML template we will create next
     return render_template('civil_form.html')
 
-# --- Route to Handle Form Submission ---
+# --- Route to Handle Form Submission (e.g., /site-civil/submit) ---
 @site_civil_bp.route('/submit', methods=['POST'])
 def submit_form():
     """Handles data submission and triggers report generation."""
@@ -21,24 +25,13 @@ def submit_form():
     # 1. Get the form data
     form_data = request.form
 
-    # 2. Trigger report generation
-    # These functions will be defined in the excel/pdf scripts
+    # 2. Trigger report generation using the IMPORTED functions
     excel_filename = create_excel_report(form_data)
     pdf_filename = create_pdf_report(form_data)
 
     # 3. Return the success page with download links
+    # Note: 'download_generated' is a global function defined in Injaaz.py
     return render_template('civil_success.html',
                            excel_file=excel_filename,
                            pdf_file=pdf_filename)
-    
-# --- Placeholder Functions for Report Generation ---
-# IMPORTANT: These functions must match the names used in submit_form()
-def create_excel_report(data):
-    # In a real app, this would call site_civil_excel.py functions
-    # For now, return a placeholder file name
-    return "Site_Civil_Report_TEMP.xlsx"
 
-def create_pdf_report(data):
-    # In a real app, this would call site_civil_pdf.py functions
-    # For now, return a placeholder file name
-    return "Site_Civil_Report_TEMP.pdf"
