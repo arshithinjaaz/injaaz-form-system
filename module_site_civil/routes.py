@@ -4,12 +4,15 @@ import os
 from flask import Blueprint, render_template, request, url_for, redirect, jsonify
 
 # 1. IMPORT the report generation functions from the placeholder files.
-# This fixes the 500 error by satisfying the application's required structure.
+# We explicitly reference the files within the package to ensure the app finds them.
+# The dot (.) prefix means "from the current package", which is module_site_civil
 from .site_civil_excel import create_excel_report 
 from .site_civil_pdf import create_pdf_report 
 
 # Define the Blueprint for the Civil module
-site_civil_bp = Blueprint('site_civil_bp', __name__)
+site_civil_bp = Blueprint('site_civil_bp', __name__, 
+                           # Tweak: Set the template folder explicitly for robustness
+                           template_folder='templates') 
 
 # --- Route to Render the Form (e.g., /site-civil/) ---
 @site_civil_bp.route('/', methods=['GET'])
@@ -30,7 +33,6 @@ def submit_form():
     pdf_filename = create_pdf_report(form_data)
 
     # 3. Return the success page with download links
-    # Note: 'download_generated' is a global function defined in Injaaz.py
     return render_template('civil_success.html',
                            excel_file=excel_filename,
                            pdf_file=pdf_filename)
