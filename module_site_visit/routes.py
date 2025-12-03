@@ -21,11 +21,6 @@ GENERATED_DIR_NAME = "generated"
 GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
 IMAGE_UPLOAD_DIR = os.path.join(GENERATED_DIR, "images")
 
-# --- LOGO PATH DEFINITION (CRITICAL FIX) ---
-# Assuming 'static' folder is parallel to the 'site_visit_bp' folder (i.e., in BASE_DIR)
-LOGO_ABSOLUTE_PATH = os.path.join(BASE_DIR, 'static', 'INJAAZ.png') 
-# --- END LOGO PATH ---
-
 
 # Define the Blueprint
 site_visit_bp = Blueprint(
@@ -65,7 +60,7 @@ def save_base64_image(base64_data, filename_prefix):
 
 
 # =================================================================
-# 1. Route: Main Form Page
+# 1. Route: Main Form Page (Called by url_for('site_visit_bp.index') from dashboard.html)
 # =================================================================
 @site_visit_bp.route('/form') 
 def index():
@@ -92,12 +87,23 @@ def get_dropdown_data():
 
 
 # =================================================================
+# 3. Route: File Download Endpoint
+#    ***REMOVED REDUNDANT ROUTE*** (The file serving is handled by download_generated 
+#    in Injaaz.py which serves from the /generated/ path.)
+# =================================================================
+# @site_visit_bp.route('/downloads/<filename>')
+# def download_file(filename):
+#    return send_from_directory(GENERATED_DIR, filename, as_attachment=True)
+
+
+# =================================================================
 # 4. Route: Form Submission (Called by POST to /submit)
 # =================================================================
 @site_visit_bp.route('/submit', methods=['POST'])
 def submit():
     # 1. Setup
     data = request.get_json()
+    # temp_image_paths only tracks images, NOT the final Excel/PDF reports
     temp_image_paths = [] 
     final_items = [] 
     
@@ -160,9 +166,9 @@ def submit():
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
         
         # -----------------------------------------------------------------
-        # --- 6. Generate PDF Report (CRITICAL FIX: Pass LOGO_ABSOLUTE_PATH) ---
+        # --- 6. Generate PDF Report ---
         # -----------------------------------------------------------------
-        pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR, logo_path=LOGO_ABSOLUTE_PATH)
+        pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
         
         # --- 7. Send Email ---
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')}"
@@ -196,10 +202,11 @@ INJAAZ System
                 print(f"Error deleting temp image file {path}: {e}")
 
         # ----------------------
-        # 9. RESPONSE TO FRONTEND 
+        # 9. RESPONSE TO FRONTEND (CRITICAL: Using the root app's 'download_generated' route)
         # ----------------------
         return jsonify({
             "status": "success",
+            # FIX: Point to the main app's download route, not a blueprint route
             "excel_url": url_for('download_generated', filename=excel_filename, _external=True), 
             "pdf_url": url_for('download_generated', filename=pdf_filename, _external=True)
         })
