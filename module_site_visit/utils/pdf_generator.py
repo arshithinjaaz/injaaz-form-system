@@ -110,96 +110,149 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
         logger.error(f"Image load error for path {file_path}: {e}")
         return Paragraph(f'<font size="8">Image Load Error</font>', styles['SmallText'])
 
+# Helper function to create the photo grid (used in Section 2 now)
+def create_extra_photo_grid(extra_image_paths):
+    """Creates a Table element for all photos starting from the second one."""
+    
+    if not extra_image_paths:
+        return []
+
+    story = []
+    
+    # Use a smaller size for the detailed breakdown images
+    PHOTO_WIDTH = 1.5 * inch
+    PHOTO_HEIGHT = 1.2 * inch 
+    
+    story.append(Spacer(1, 0.1 * inch))
+    story.append(Paragraph("<font size='10'><b>All Photos:</b></font>", styles['Question']))
+    story.append(Spacer(1, 0.05 * inch))
+    
+    photo_elements = []
+    for img_path in extra_image_paths:
+        photo = get_image_from_path(img_path, PHOTO_WIDTH, PHOTO_HEIGHT, placeholder_text="Image Missing")
+        photo_elements.append(photo)
+    
+    # Arrange photos in a single row table
+    if photo_elements:
+        # We need a fixed width for the grid to align it properly below the table
+        PAGE_WIDTH = 7.27 * inch
+        MAX_COLS = 4
+        COL_WIDTH = PAGE_WIDTH / MAX_COLS
+        
+        # Ensure we don't have too many columns, just use the number of photos
+        col_widths = [COL_WIDTH] * len(photo_elements)
+
+        photo_grid_table = Table([photo_elements], colWidths=col_widths)
+        photo_grid_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'), # Aligned left to match text
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10), 
+        ]))
+        story.append(photo_grid_table)
+        
+    return story
+
+
 # FUNCTION: Creates the table for user-selected photos/items (Section 2)
 def create_report_photo_items_table(visit_info, processed_items):
     """
-    Creates the 'Report Photo Items' table (Section 2).
-    Displays the first photo of *every item* that has a photo, 
-    along with simplified item details.
+    Creates the 'Report Photo Items' section (Section 2).
+    Displays the first photo and details for every item, followed immediately 
+    by any extra photos for that item.
     """
     
-    # Column Widths
+    story = []
+    story.append(Paragraph('2. Report photo items', styles['BoldTitle']))
+    story.append(Spacer(1, 0.1*inch))
+    
+    # Column Widths (Must sum to 7.27 * inch)
     IMG_COL_WIDTH = 1.75 * inch
     IMG_WIDTH = 1.75 * inch  
     IMG_HEIGHT = 1.3 * inch  
-    
     PAGE_WIDTH = 7.27 * inch 
     DETAILS_COL_WIDTH = PAGE_WIDTH - IMG_COL_WIDTH
     
-    # Header row
-    table_data = [
-        [
-            Paragraph('<b>Photo</b>', styles['Question']), 
-            Paragraph('<b>Report photo items</b>', styles['Question'])
-        ]
-    ]
-
-    # Initialize TableStyle commands
-    header_style_commands = [
-        ('BACKGROUND', (0, 0), (-1, 0), ACCENT_BG_COLOR),
-        ('TEXTCOLOR', (0, 0), (-1, 0), BRAND_COLOR),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, GRID_COLOR),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-    ]
-
-    has_photos = False
-    
-    # LOOP THROUGH ALL ITEMS (No 'break' here, we want all items)
+    # Iterate through each item to build the list of tables/elements
     for i, item in enumerate(processed_items):
+        
+        # 1. Check if the item has at least one photo
         if item.get('image_paths') and os.path.exists(item['image_paths'][0]):
-            has_photos = True
             
-            # Use the FIRST image path only
+            # --- BUILD THE SINGLE-ITEM TABLE ---
+            
+            # Header row (only displayed once at the start of the section, or could be per item)
+            # For simplicity and visual continuity, we'll keep the header outside the loop structure 
+            # and just build the table data within the loop. 
+            
+            # Since ReportLab tables are rigid, we can't easily merge cells for the photo grid.
+            # Instead, we create a single table for each item and its first photo/details, 
+            # and then immediately follow it with the photo grid.
+            
+            # Table Data for this specific item (just one row)
+            table_data = [
+                [
+                    Paragraph('<b>Photo</b>', styles['Question']), 
+                    Paragraph('<b>Report photo items</b>', styles['Question'])
+                ]
+            ]
+            
+            # Content Row
             img_path = item['image_paths'][0] 
             item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
             
-            # Item details summary (Item #, Asset, System, and Description)
             details_text = f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}<br/>"
             details_text += f"Description: {item['description']}"
             
             details_para = Paragraph(details_text, styles['Answer'])
             
             table_data.append([item_image, details_para])
+
+            # Define the Table
+            item_summary_table = Table(table_data, colWidths=[IMG_COL_WIDTH, DETAILS_COL_WIDTH])
+
+            # Define Table Style
+            header_style_commands = [
+                ('BACKGROUND', (0, 0), (-1, 0), ACCENT_BG_COLOR),
+                ('TEXTCOLOR', (0, 0), (-1, 0), BRAND_COLOR),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.5, GRID_COLOR),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                
+                # Padding for header and content rows
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+
+                # Padding around the image (Column 0, Row 1)
+                ('LEFTPADDING', (0, 1), (0, 1), 5), 
+                ('RIGHTPADDING', (0, 1), (0, 1), 5),
+                ('VALIGN', (0, 1), (0, 1), 'MIDDLE'),
+                
+                # Padding for the text column (Column 1, Row 1)
+                ('LEFTPADDING', (1, 1), (1, 1), 10), 
+                ('VALIGN', (1, 1), (1, 1), 'MIDDLE'),
+            ]
             
-            # We explicitly DO NOT use 'break' here so all items with a first photo are listed.
+            item_summary_table.setStyle(TableStyle(header_style_commands))
+            story.append(item_summary_table)
+            
+            # --- ADD EXTRA PHOTOS BELOW THE TABLE ---
+            if len(item['image_paths']) > 1:
+                extra_image_paths = item['image_paths'][1:]
+                story.extend(create_extra_photo_grid(extra_image_paths))
 
-    if not has_photos:
-        # If no items have photos, show a clearer placeholder row
-        table_data.append([
-            Paragraph('', styles['Normal']), 
-            Paragraph('No items with photos were selected for this report section.', styles['Normal'])
-        ])
-    
-    photo_table = Table(table_data, colWidths=[IMG_COL_WIDTH, DETAILS_COL_WIDTH])
+            story.append(Spacer(1, 0.1 * inch))
+            
+    # Handle case where NO items had any photos
+    if not story:
+        story.append(Paragraph('No items with photos were selected for this report section.', styles['Normal']))
 
-    # Applying styles for content rows (index 1 to the end)
-    if len(table_data) > 1:
-        # 1. Padding around the image column cells (index 0, starting from row 1)
-        header_style_commands.append(('LEFTPADDING', (0, 1), (0, -1), 5)) 
-        header_style_commands.append(('RIGHTPADDING', (0, 1), (0, -1), 5))
-        header_style_commands.append(('TOPPADDING', (0, 1), (0, -1), 5))
-        header_style_commands.append(('BOTTOMPADDING', (0, 1), (0, -1), 5))
-
-        # 2. Vertical alignment for all data rows (row index 1 to the end)
-        header_style_commands.append(('VALIGN', (0, 1), (-1, -1), 'MIDDLE'))
-        
-        # 3. Left padding for the text column
-        header_style_commands.append(('LEFTPADDING', (1, 1), (-1, -1), 10)) 
-
-    photo_table.setStyle(TableStyle(header_style_commands))
-    
-    story = []
-    story.append(Paragraph('2. Report photo items', styles['BoldTitle']))
-    story.append(Spacer(1, 0.1*inch))
-    story.append(photo_table)
     story.append(Spacer(1, 0.2*inch))
     
     return story
-
 
 # --- TEMPLATE HANDLER FOR FOOTER ---
 FOOTER_TEXT = "PO BOX, 3456 Ajman, UAE | Tel +971 6 7489813 | Fax +971 6 711 6701 | www.injaaz.ae | Member of Ajman Holding group"
@@ -314,7 +367,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(details_table)
     story.append(Spacer(1, 0.2*inch))
 
-    # --- SECTION 2: Report Photo Items (Now includes the first photo of all items) ---
+    # --- SECTION 2: Report Photo Items (Now includes the first photo of all items and extra photos) ---
     story.extend(create_report_photo_items_table(visit_info, processed_items))
 
 
@@ -349,37 +402,8 @@ def build_report_story(visit_info, processed_items, logo_path):
             ]))
             story.append(item_table)
             
-            # --- ADDING ONLY EXTRA PHOTOS HERE ---
-            # Check if there are more than 1 photo (i.e., if image_paths[1:] exists)
-            if item.get('image_paths') and len(item['image_paths']) > 1:
-                
-                # Get all paths EXCEPT the first one (which is in Section 2)
-                extra_image_paths = item['image_paths'][1:] 
-
-                story.append(Spacer(1, 0.1 * inch))
-                story.append(Paragraph("<b>All Photos:</b>", styles['Question']))
-                story.append(Spacer(1, 0.05 * inch))
-                
-                photo_elements = []
-                for img_path in extra_image_paths:
-                    # Use a smaller size for the detailed breakdown images
-                    photo = get_image_from_path(img_path, 1.5 * inch, 1.2 * inch, placeholder_text="Image Missing")
-                    photo_elements.append(photo)
-                
-                # Arrange photos in a single row table
-                if photo_elements:
-                    # Column width is calculated to fit multiple images horizontally
-                    photo_grid_table = Table([photo_elements], colWidths=[1.8175 * inch] * len(photo_elements))
-                    photo_grid_table.setStyle(TableStyle([
-                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                        ('TOPPADDING', (0, 0), (-1, -1), 0),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 10), # Added padding below the photo grid
-                    ]))
-                    story.append(photo_grid_table)
-
+            # NOTE: All photos are now handled in Section 2, so this section is cleaner.
+            
             story.append(Spacer(1, 0.3 * inch))
 
     else:
