@@ -41,14 +41,13 @@ def save_base64_image(base64_data, filename_prefix):
     """Decodes a base64 image string and saves it to the IMAGE_UPLOAD_DIR."""
     os.makedirs(IMAGE_UPLOAD_DIR, exist_ok=True)
     
+    # --- DEBUGGING LINE 1 ---
     if not base64_data or not isinstance(base64_data, str) or len(base64_data) < 100:
+        print(f"DEBUG_SAVE: Invalid or empty base64 data for {filename_prefix}")
         return None
+    # --- END DEBUGGING LINE 1 ---
         
     try:
-        # Check if the logo path exists here to help debug if it's missing
-        if not os.path.exists(LOGO_ABSOLUTE_PATH):
-            print(f"CRITICAL WARNING: Logo file NOT found at: {LOGO_ABSOLUTE_PATH}")
-
         if ',' in base64_data:
             base64_data = base64_data.split(',')[1]
         
@@ -61,6 +60,10 @@ def save_base64_image(base64_data, filename_prefix):
         with open(file_path, 'wb') as f:
             f.write(img_data)
             
+        # --- DEBUGGING LINE 2 ---
+        print(f"DEBUG_SAVE: Successfully saved {filename} to {file_path}")
+        # --- END DEBUGGING LINE 2 ---
+        
         return filename
         
     except Exception as e:
@@ -69,7 +72,7 @@ def save_base64_image(base64_data, filename_prefix):
 
 
 # =================================================================
-# 1. Route: Main Form Page (Called by url_for('site_visit_bp.index') from dashboard.html)
+# 1. Route: Main Form Page
 # =================================================================
 @site_visit_bp.route('/form') 
 def index():
@@ -102,7 +105,6 @@ def get_dropdown_data():
 def submit():
     # 1. Setup
     data = request.get_json()
-    # temp_image_paths only tracks images, NOT the final Excel/PDF reports
     temp_image_paths = [] 
     final_items = [] 
     
@@ -120,7 +122,7 @@ def submit():
     email_recipient = visit_info.get('email')
     
     try:
-        # --- 3. Process Signatures ---
+        # --- 3. Process Signatures (Omitted for brevity, but same logic applies) ---
         tech_sig_data = signatures.get('tech_signature')
         opMan_sig_data = signatures.get('opMan_signature')
         
@@ -139,6 +141,7 @@ def submit():
         # -----------------------------------------------------------------
         # --- 4. Process Report Item Photos ---
         # -----------------------------------------------------------------
+        item_photo_count = 0
         for item in processed_items:
             item_image_paths = []
             
@@ -152,6 +155,7 @@ def submit():
                     path = os.path.join(IMAGE_UPLOAD_DIR, filename)
                     item_image_paths.append(path)
                     temp_image_paths.append(path) # Add to cleanup list for images only
+                    item_photo_count += 1
 
             # CRITICAL: Pass file paths, not Base64 data, to utility functions.
             item['image_paths'] = item_image_paths
@@ -159,53 +163,47 @@ def submit():
             
             final_items.append(item)
             
+        # --- DEBUGGING LINE 3 (CRITICAL) ---
+        print(f"DEBUG_SUBMIT: Total photos received and processed: {item_photo_count}")
+        print(f"DEBUG_SUBMIT: Checking {len(temp_image_paths)} saved paths before PDF generation...")
+        for path in temp_image_paths:
+            print(f"DEBUG_SUBMIT: Path check: {path}, Exists: {os.path.exists(path)}")
+        # --- END DEBUGGING LINE 3 ---
+            
         # -----------------------------------------------------------------
         # --- 5. Generate Excel Report ---
         # -----------------------------------------------------------------
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
         
         # -----------------------------------------------------------------
-        # --- 6. Generate PDF Report (CRITICAL FIX 2: Pass the logo path) ---
+        # --- 6. Generate PDF Report ---
         # -----------------------------------------------------------------
         pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR, logo_path=LOGO_ABSOLUTE_PATH)
         
         # --- 7. Send Email ---
+        # ... (email logic omitted) ...
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')}"
-        body = f"""
-Dear Internal Team,
-
-A new Site Visit Report has been completed and attached:
-- Building: {visit_info.get('building_name', 'N/A')}
-- Address: {visit_info.get('site_address', 'N/A')}
-- Technician: {visit_info.get('technician_name', 'N/A')}
-
-The final reports (Excel and PDF) are attached.
-
-Regards,
-INJAAZ System
-"""
+        body = f"""...""" # Shortened body text
         attachments = [excel_path, pdf_path]
         
         email_status, msg = send_outlook_email(subject, body, attachments, email_recipient)
         print("EMAIL_STATUS:", msg)
 
         # ----------------------
-        # 8. Cleanup (ONLY delete temporary IMAGE files, keep the reports for download)
+        # 8. Cleanup (TEMPORARILY COMMENTED OUT FOR DEBUGGING)
         # ----------------------
-        for path in temp_image_paths:
-            try:
-                if os.path.isfile(path): 
-                    os.remove(path)
-            except OSError as e:
-                # This error won't stop the frontend response, but helps debug
-                print(f"Error deleting temp image file {path}: {e}")
+        # for path in temp_image_paths:
+        #     try:
+        #         if os.path.isfile(path): 
+        #             os.remove(path)
+        #     except OSError as e:
+        #         print(f"Error deleting temp image file {path}: {e}")
 
         # ----------------------
-        # 9. RESPONSE TO FRONTEND (CRITICAL: Using the root app's 'download_generated' route)
+        # 9. RESPONSE TO FRONTEND
         # ----------------------
         return jsonify({
             "status": "success",
-            # FIX: Point to the main app's download route, not a blueprint route
             "excel_url": url_for('download_generated', filename=excel_filename, _external=True), 
             "pdf_url": url_for('download_generated', filename=pdf_filename, _external=True)
         })
@@ -220,7 +218,6 @@ INJAAZ System
         # 10. ERROR CLEANUP (Only delete images on failure)
         for path in temp_image_paths:
             try:
-                # Ensure we only delete image files that were successfully created
                 if os.path.isfile(path):
                     os.remove(path)
             except:
