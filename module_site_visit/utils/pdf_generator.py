@@ -110,10 +110,12 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
         logger.error(f"Image load error for path {file_path}: {e}")
         return Paragraph(f'<font size="8">Image Load Error</font>', styles['SmallText'])
 
-# FUNCTION: Creates the table for user-selected photos/items
+# FUNCTION: Creates the table for user-selected photos/items (Section 2)
 def create_report_photo_items_table(visit_info, processed_items):
     """
-    Creates the 'Report Photo Items' table using the image_paths from processed_items.
+    Creates the 'Report Photo Items' table (Section 2).
+    Displays only the first photo of the first item that has a photo, 
+    along with simplified item details (Item #, Asset, System, and Description).
     """
     
     # Determine the desired image size for the first column
@@ -143,39 +145,39 @@ def create_report_photo_items_table(visit_info, processed_items):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
     ])
 
-    has_items = False
+    has_first_photo_item = False
+    
+    # Find the first item that has an image
     for i, item in enumerate(processed_items):
-        # Check if the item has any valid image paths
         if item.get('image_paths') and os.path.exists(item['image_paths'][0]):
-            has_items = True
+            has_first_photo_item = True
             
             # Use the first image path
             img_path = item['image_paths'][0] 
             item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
             
-            # Format the item details for the right column
+            # --- MODIFICATION: Only include Item #, Asset, System, and Description ---
             details_text = f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}<br/>"
-            details_text += f"Description: {item['description']}<br/>"
-            details_text += f"Quantity: {item['quantity']}<br/>"
-            details_text += f"Brand/Model: {item['brand'] or 'N/A'}<br/>"
-            details_text += f"Comments: {item['comments'] or 'N/A'}"
+            details_text += f"Description: {item['description']}"
+            # Removed: Quantity, Brand/Model, Comments
             
             details_para = Paragraph(details_text, styles['Answer'])
             
             table_data.append([item_image, details_para])
+            
+            # Only show the first item, then break the loop
+            break
 
-    if not has_items:
+    if not has_first_photo_item:
         # If no items are selected/have photos, show a clearer placeholder row
         table_data.append([
             Paragraph('', styles['Normal']), 
             Paragraph('No items with photos were selected for this report section.', styles['Normal'])
         ])
         
-        # Ensure the table is created even if only the header/placeholder is present
         photo_table = Table(table_data, colWidths=[IMG_WIDTH, DETAILS_COL_WIDTH])
         
     else:
-        # Only set column widths for the main table if there is actual content
         photo_table = Table(table_data, colWidths=[IMG_WIDTH, DETAILS_COL_WIDTH])
 
     photo_table.setStyle(header_style)
@@ -213,7 +215,7 @@ def page_layout_template(canvas, doc):
 
     canvas.restoreState()
 
-# --- MAIN GENERATOR FUNCTION (CRITICAL FIX 1: Added logo_path argument) ---
+# --- MAIN GENERATOR FUNCTION ---
 
 def generate_visit_pdf(visit_info, processed_items, output_dir, logo_path): 
     
@@ -228,7 +230,7 @@ def generate_visit_pdf(visit_info, processed_items, output_dir, logo_path):
                              rightMargin=0.5 * inch, leftMargin=0.5 * inch,
                              topMargin=0.5 * inch, bottomMargin=0.75 * inch)
                              
-    Story = build_report_story(visit_info, processed_items, logo_path) # Pass logo_path here
+    Story = build_report_story(visit_info, processed_items, logo_path)
     
     doc.build(
         Story, 
@@ -239,7 +241,7 @@ def generate_visit_pdf(visit_info, processed_items, output_dir, logo_path):
     return pdf_path, pdf_filename
 
 
-def build_report_story(visit_info, processed_items, logo_path): # CRITICAL FIX 2: Added logo_path argument
+def build_report_story(visit_info, processed_items, logo_path):
     story = []
     
     # --- 1. Header and Title with Logo ---
@@ -248,14 +250,13 @@ def build_report_story(visit_info, processed_items, logo_path): # CRITICAL FIX 2
     
     logo_image = Paragraph('', styles['Normal'])
     try:
-        if os.path.exists(logo_path): # CRITICAL FIX 3: Use the passed, absolute logo_path
+        if os.path.exists(logo_path):
             logo_image = Image(logo_path)
             # Adjusted size for A4 width
             logo_image.drawWidth = 1.0 * inch 
             logo_image.drawHeight = 0.9 * inch 
             logo_image.hAlign = 'RIGHT' 
             
-            # Optional: Add a log statement if the logo is found
             logger.info(f"Logo file successfully loaded from: {logo_path}")
         else:
             logger.warning(f"Logo file not found at: {logo_path}")
@@ -337,25 +338,21 @@ def build_report_story(visit_info, processed_items, logo_path): # CRITICAL FIX 2
             story.append(item_table)
             story.append(Spacer(1, 0.1*inch))
             
-            # Photos for this item (if available)
+            # Photos for this item (if available) - MODIFIED: Removed label table and grid around photos
             if item.get('image_paths'):
                 
-                photo_label_data = [[Paragraph('<b>All Photos:</b>', styles['Question'])]]
-                photo_label_table = Table(photo_label_data, colWidths=[PAGE_WIDTH])
-                photo_label_table.setStyle(TableStyle([
-                    ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F9F9F9')),
-                    ('LEFTPADDING', (0,0), (-1,-1), 6),
-                ]))
-                story.append(photo_label_table)
+                # MODIFICATION: Replaced header box/table with simple Paragraph
+                story.append(Paragraph('All Photos:', styles['Normal'])) 
 
                 image_elements = []
                 for path in item['image_paths']:
-                    img = get_image_from_path(path, 2.2 * inch, 1.7 * inch, placeholder_text="Photo N/A")
+                    # Use a slightly smaller size for images inside the detailed breakdown
+                    img = get_image_from_path(path, 1.8 * inch, 1.3 * inch, placeholder_text="Photo N/A") 
                     image_elements.append(img)
 
-                # Arrange images into rows of 3 (adjusting width for 3 columns on A4)
+                # Arrange images into rows of 3
                 num_cols = 3
-                col_width = PAGE_WIDTH / num_cols # ~2.42 inch
+                col_width = PAGE_WIDTH / num_cols 
                 rows = [image_elements[k:k + num_cols] for k in range(0, len(image_elements), num_cols)]
                 
                 if rows:
@@ -365,7 +362,8 @@ def build_report_story(visit_info, processed_items, logo_path): # CRITICAL FIX 2
                         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                         ('TOPPADDING', (0, 0), (-1, -1), 5),
                         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                        ('GRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
+                        # MODIFICATION: Grid line removed from photo table
+                        # ('GRID', (0,0), (-1,-1), 0.25, colors.lightgrey), 
                     ]))
                     story.append(photo_table)
             
