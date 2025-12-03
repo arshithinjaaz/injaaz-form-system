@@ -2,7 +2,7 @@ import os
 import time
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph, Image, PageBreak, Flowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from datetime import datetime
@@ -119,10 +119,10 @@ def create_report_photo_items_table(visit_info, processed_items):
     """
     
     # Determine the desired image size for the first column
-    # *** MODIFICATION HERE: Reduced image column width from 2.0 to 1.75 inch ***
+    # MODIFIED: Reduced image column width to 1.75 inch
     IMG_COL_WIDTH = 1.75 * inch
-    IMG_WIDTH = 1.75 * inch  # Image size matches the column width
-    IMG_HEIGHT = 1.3 * inch  # Adjusted height for 1.75 width for better ratio
+    IMG_WIDTH = 1.75 * inch  
+    IMG_HEIGHT = 1.3 * inch  
     
     # Calculate the remaining width for the details column
     PAGE_WIDTH = 7.27 * inch 
@@ -157,7 +157,6 @@ def create_report_photo_items_table(visit_info, processed_items):
             
             # Use the first image path
             img_path = item['image_paths'][0] 
-            # Note: We use IMG_WIDTH/IMG_HEIGHT for the actual image drawing size
             item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
             
             # Only include Item #, Asset, System, and Description
@@ -168,7 +167,7 @@ def create_report_photo_items_table(visit_info, processed_items):
             
             table_data.append([item_image, details_para])
             
-            # Only show the first item, then break the loop
+            # We use BREAK here to ensure only the first item summary is in Section 2.
             break
 
     if not has_first_photo_item:
@@ -323,6 +322,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(Spacer(1, 0.2*inch))
 
     # --- SECTION 2: Report Photo Items (For the main image) ---
+    # This section remains a summary (only the first item's first photo)
     story.extend(create_report_photo_items_table(visit_info, processed_items))
 
 
@@ -332,7 +332,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     
     if processed_items:
         for i, item in enumerate(processed_items):
-            # Item Details
+            # Item Details Title
             story.append(Paragraph(f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}", styles['Question']))
             story.append(Spacer(1, 0.05*inch))
             
@@ -353,10 +353,36 @@ def build_report_story(visit_info, processed_items, logo_path):
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('GRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
                 ('LEFTPADDING', (0,0), (-1,-1), 6),
-                # Ensure the cells have enough vertical space
                 ('BOTTOMPADDING', (0, 1), (-1, -1), 6), 
             ]))
             story.append(item_table)
+            
+            # --- ADDING ALL PHOTOS HERE ---
+            if item.get('image_paths'):
+                story.append(Spacer(1, 0.1 * inch))
+                story.append(Paragraph("<b>All Photos:</b>", styles['Question']))
+                story.append(Spacer(1, 0.05 * inch))
+                
+                photo_elements = []
+                for img_path in item['image_paths']:
+                    # Use a smaller size for the detailed breakdown images
+                    photo = get_image_from_path(img_path, 1.5 * inch, 1.2 * inch, placeholder_text="Image Missing")
+                    photo_elements.append(photo)
+                
+                # Arrange photos in a single row table
+                if photo_elements:
+                    # Column width is calculated to fit 4 images comfortably in the 7.27 inch width
+                    photo_grid_table = Table([photo_elements], colWidths=[1.8175 * inch] * len(photo_elements))
+                    photo_grid_table.setStyle(TableStyle([
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                        ('TOPPADDING', (0, 0), (-1, -1), 0),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 10), # Added padding below the photo grid
+                    ]))
+                    story.append(photo_grid_table)
+
             story.append(Spacer(1, 0.3 * inch))
 
     else:
