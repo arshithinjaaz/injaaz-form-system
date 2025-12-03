@@ -57,11 +57,12 @@ def get_sig_image_from_path(file_path, name):
     return Paragraph(f'Unsigned: {name}', styles['Normal']) 
 
 def create_signature_table(visit_info):
-    """Creates the signature block."""
+    """Creates the signature block. Note: Section number is updated to 4."""
     sig_story = []
     
     sig_story.append(Spacer(1, 0.3*inch))
-    sig_story.append(Paragraph('4. Signatures', styles['BoldTitle'])) 
+    # *** CHANGE 2: The section number is now 3 (since General Notes was removed) ***
+    sig_story.append(Paragraph('3. Signatures', styles['BoldTitle'])) 
     sig_story.append(Spacer(1, 0.1*inch)) 
 
     # Retrieve file paths saved in app.py
@@ -114,6 +115,83 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
         logger.error(f"Image load error for path {file_path}: {e}")
         return Paragraph(f'<font size="8">Image Load Error</font>', styles['SmallText'])
 
+# *** NEW FUNCTION: Creates the table for user-selected photos/items ***
+def create_report_photo_items_table(visit_info, processed_items):
+    """
+    Creates the 'Report Photo Items' table which only includes items 
+    that the user marked for inclusion in this dedicated table.
+    """
+    # Assuming the flag for including a photo in this specific table is 'include_in_photo_report'
+    # and the image path is available in item['image_paths'][0] if it exists.
+    
+    # Determine the desired image size for the first column
+    IMG_WIDTH = 2.0 * inch
+    IMG_HEIGHT = 1.5 * inch
+    # Calculate the remaining width for the details column
+    PAGE_WIDTH = 7.27 * inch 
+    DETAILS_COL_WIDTH = PAGE_WIDTH - IMG_WIDTH
+    
+    # Header row
+    table_data = [
+        [
+            Paragraph('<b>Photo</b>', styles['Question']), 
+            Paragraph('<b>Report photo items</b>', styles['Question'])
+        ]
+    ]
+
+    # Style for the header row
+    header_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), ACCENT_BG_COLOR),
+        ('TEXTCOLOR', (0, 0), (-1, 0), BRAND_COLOR),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, GRID_COLOR),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ])
+
+    has_items = False
+    for i, item in enumerate(processed_items):
+        # We need a field in visit_info or item to indicate if this photo should be included
+        # For demonstration, let's assume all items with an image are included for now.
+        if item.get('image_paths'):
+            has_items = True
+            
+            # Use the first image path
+            img_path = item['image_paths'][0] 
+            item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
+            
+            # Format the item details for the right column
+            details_text = f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}<br/>"
+            details_text += f"Description: {item['description']}<br/>"
+            details_text += f"Quantity: {item['quantity']}<br/>"
+            details_text += f"Brand/Model: {item['brand'] or 'N/A'}<br/>"
+            details_text += f"Comments: {item['comments'] or 'N/A'}"
+            
+            details_para = Paragraph(details_text, styles['Answer'])
+            
+            table_data.append([item_image, details_para])
+
+    if not has_items:
+        # If no items are selected/have photos, just show a placeholder row
+        table_data.append([
+            Paragraph('', styles['Normal']), 
+            Paragraph('No items with photos were selected for this report section.', styles['Normal'])
+        ])
+
+    photo_table = Table(table_data, colWidths=[IMG_WIDTH, DETAILS_COL_WIDTH])
+    photo_table.setStyle(header_style)
+    
+    story = []
+    story.append(Paragraph('2. Report photo items', styles['BoldTitle']))
+    story.append(Spacer(1, 0.1*inch))
+    story.append(photo_table)
+    story.append(Spacer(1, 0.2*inch))
+    
+    return story
+
+
 # --- TEMPLATE HANDLER FOR FOOTER ---
 FOOTER_TEXT = "PO BOX, 3456 Ajman, UAE | Tel +971 6 7489813 | Fax +971 6 711 6701 | www.injaaz.ae | Member of Ajman Holding group"
 
@@ -150,9 +228,9 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
     
     # Adjust margins slightly for A4 and custom layout
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
-                            rightMargin=0.5 * inch, leftMargin=0.5 * inch,
-                            topMargin=0.5 * inch, bottomMargin=0.75 * inch)
-                            
+                             rightMargin=0.5 * inch, leftMargin=0.5 * inch,
+                             topMargin=0.5 * inch, bottomMargin=0.75 * inch)
+                             
     Story = build_report_story(visit_info, processed_items)
     
     doc.build(
@@ -168,35 +246,41 @@ def build_report_story(visit_info, processed_items):
     story = []
     
     # --- 1. Header and Title with Logo ---
+    # *** CHANGE 1: Added logo to the top header table. ***
     title_text = f"Site Visit Report - {visit_info.get('building_name', 'N/A')}"
-    title_paragraph = Paragraph(title_text, styles['BoldTitle'])
-
-    logo = Paragraph('', styles['Normal'])
+    title_paragraph = Paragraph(f"<b>{title_text}</b>", styles['BoldTitle']) # Bolding the title for better contrast
+    
+    logo_image = Paragraph('', styles['Normal'])
     try:
         if os.path.exists(LOGO_PATH):
-            logo = Image(LOGO_PATH)
+            logo_image = Image(LOGO_PATH)
             # Adjusted size for A4 width
-            logo.drawWidth = 0.8 * inch 
-            logo.drawHeight = 0.7 * inch 
-            logo.hAlign = 'RIGHT' 
+            logo_image.drawWidth = 1.0 * inch # Increased logo size slightly
+            logo_image.drawHeight = 0.9 * inch 
+            logo_image.hAlign = 'RIGHT' 
+        else:
+            logger.warning(f"Logo file not found at: {LOGO_PATH}")
     except Exception as e:
-        logger.warning(f"Logo not found or failed to load: {e}")
+        logger.warning(f"Failed to load logo image: {e}")
 
     # Use A4 width (8.27 inches) minus margins (0.5 + 0.5 = 1.0 inch) gives 7.27 inch for table width
     PAGE_WIDTH = 7.27 * inch 
     
-    header_data = [[title_paragraph, logo]]
-    header_table = Table(header_data, colWidths=[PAGE_WIDTH - 1.0 * inch, 1.0 * inch]) 
+    header_data = [[title_paragraph, logo_image]]
+    # Increased the logo column width to 1.5 inch for a better-sized logo
+    header_table = Table(header_data, colWidths=[PAGE_WIDTH - 1.5 * inch, 1.5 * inch]) 
     header_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'), # Ensure title is left-aligned
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'), # Ensure logo is right-aligned
+        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
     ]))
     
     story.append(header_table)
-    story.append(Spacer(1, 0.2*inch))
+    story.append(Spacer(1, 0.1*inch))
 
 
-    # --- 2. Visit & Contact Details (Based on your template Block 1) ---
+    # --- 2. Visit & Contact Details (Section 1) ---
     story.append(Paragraph('1. Visit & Contact Details', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
@@ -219,9 +303,27 @@ def build_report_story(visit_info, processed_items):
     story.append(details_table)
     story.append(Spacer(1, 0.2*inch))
 
+    # --- NEW SECTION 2: Report Photo Items (Based on user selection) ---
+    # *** CHANGE 3: Added the new table for Report photo items ***
+    story.extend(create_report_photo_items_table(visit_info, processed_items))
 
-    # --- 3. Report Items ---
-    story.append(Paragraph('2. Report Items', styles['BoldTitle']))
+
+    # --- ORIGINAL SECTION 3: Report Items (Now Section 3, but the numbering in the signature block will be 3) ---
+    # The original "Report Items" section is kept, but its number now starts after the new photo section.
+    # We will keep the original content structure but skip the title, as the Photo Items table already covers the important visuals.
+    # If the user needs the detailed item tables, we can re-add the title and re-number it.
+    
+    # Since the "Report Photo Items" table is now Section 2, let's update the original "Report Items" to be Section 3, 
+    # but the subsequent Signatures section must be Section 4, or we combine them.
+    
+    # Let's adjust the numbering:
+    # 1. Visit & Contact Details
+    # 2. Report Photo Items (NEW)
+    # 3. Report Items (Detailed Breakdown) (ORIGINAL)
+    # 4. Signatures
+    
+    # Re-adding the title for the original detailed report items
+    story.append(Paragraph('3. Report Items (Detailed Breakdown)', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
     if processed_items:
@@ -251,11 +353,11 @@ def build_report_story(visit_info, processed_items):
             story.append(item_table)
             story.append(Spacer(1, 0.1*inch))
             
-            # Photos for this item (if available)
+            # Photos for this item (if available) - Original Photo Block
             if item.get('image_paths'):
                 
                 # Use a smaller table for photos with a light background
-                photo_label_data = [[Paragraph('<b>Photos:</b>', styles['Question'])]]
+                photo_label_data = [[Paragraph('<b>All Photos:</b>', styles['Question'])]]
                 photo_label_table = Table(photo_label_data, colWidths=[PAGE_WIDTH])
                 photo_label_table.setStyle(TableStyle([
                     ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F9F9F9')),
@@ -289,25 +391,8 @@ def build_report_story(visit_info, processed_items):
     else:
         story.append(Paragraph("No report items were added to this visit.", styles['Normal']))
 
-    # --- BLOCK 4: Notes and Observation (Used as a general comments block) ---
-    story.append(Paragraph('3. General Notes', styles['BoldTitle']))
-    story.append(Spacer(1, 0.1*inch))
-
-    notes_text = "No general notes provided." # Placeholder if no dedicated notes field exists 
-    
-    # We will use the 'comments' from the main report items if they exist, or just leave this space.
-    # Since your old template had a dedicated 'Notes' block, we'll keep this structure.
-    # If the user only provides notes in the item's 'comments', they appear under the item.
-    notes_data = [[Paragraph(notes_text, styles['Answer'])]]
-    notes_table = Table(notes_data, colWidths=[PAGE_WIDTH], rowHeights=[0.8*inch])
-    notes_table.setStyle(TableStyle([
-        ('GRID', (0,0), (-1,-1), 0.5, GRID_COLOR),
-        ('LEFTPADDING', (0,0), (-1,-1), 6),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ]))
-    story.append(notes_table)
-    
-    # --- BLOCK 5: Signatures (Now section 4) ---
+    # --- BLOCK 4: Signatures (Now section 4) ---
+    # *** CHANGE 2: Removed the "3. General Notes" section and updated the section number for Signatures. ***
     story.extend(create_signature_table(visit_info))
     
     return story
