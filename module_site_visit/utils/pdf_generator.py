@@ -17,11 +17,7 @@ BRAND_COLOR = colors.HexColor('#198754')
 ACCENT_BG_COLOR = colors.HexColor('#F2FBF8') # Lighter shade for table headers
 GRID_COLOR = colors.HexColor('#CCCCCC')
 
-# NOTE: The logo path must be accessible from where this script runs.
-# We assume 'static/INJAAZ.png' is at the root level relative to the utils folder.
-# Adjusted path relative to the script's location (assuming utils is one level down)
-LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', 'INJAAZ.png')
-
+# NOTE: REMOVED THE HARDCODED LOGO_PATH. IT IS NOW PASSED FROM routes.py.
 
 # Initialize styles
 styles = getSampleStyleSheet()
@@ -61,8 +57,8 @@ def create_signature_table(visit_info):
     sig_story = []
     
     sig_story.append(Spacer(1, 0.3*inch))
-    # *** CHANGE 2: The section number is now 3 (since General Notes was removed) ***
-    sig_story.append(Paragraph('3. Signatures', styles['BoldTitle'])) 
+    # Section number remains 3 after removing General Notes
+    sig_story.append(Paragraph('4. Signatures', styles['BoldTitle'])) 
     sig_story.append(Spacer(1, 0.1*inch)) 
 
     # Retrieve file paths saved in app.py
@@ -115,14 +111,12 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
         logger.error(f"Image load error for path {file_path}: {e}")
         return Paragraph(f'<font size="8">Image Load Error</font>', styles['SmallText'])
 
-# *** NEW FUNCTION: Creates the table for user-selected photos/items ***
+# NEW FUNCTION: Creates the table for user-selected photos/items
 def create_report_photo_items_table(visit_info, processed_items):
     """
     Creates the 'Report Photo Items' table which only includes items 
     that the user marked for inclusion in this dedicated table.
     """
-    # Assuming the flag for including a photo in this specific table is 'include_in_photo_report'
-    # and the image path is available in item['image_paths'][0] if it exists.
     
     # Determine the desired image size for the first column
     IMG_WIDTH = 2.0 * inch
@@ -153,8 +147,7 @@ def create_report_photo_items_table(visit_info, processed_items):
 
     has_items = False
     for i, item in enumerate(processed_items):
-        # We need a field in visit_info or item to indicate if this photo should be included
-        # For demonstration, let's assume all items with an image are included for now.
+        # We assume all items with an image are included for now.
         if item.get('image_paths'):
             has_items = True
             
@@ -216,9 +209,9 @@ def page_layout_template(canvas, doc):
 
     canvas.restoreState()
 
-# --- MAIN GENERATOR FUNCTION ---
+# --- MAIN GENERATOR FUNCTION (CRITICAL FIX: Added logo_path argument) ---
 
-def generate_visit_pdf(visit_info, processed_items, output_dir):
+def generate_visit_pdf(visit_info, processed_items, output_dir, logo_path): 
     
     building_name = visit_info.get('building_name', 'Unknown').replace(' ', '_')
     # Using time.time() for unique filename timestamp
@@ -231,7 +224,7 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
                              rightMargin=0.5 * inch, leftMargin=0.5 * inch,
                              topMargin=0.5 * inch, bottomMargin=0.75 * inch)
                              
-    Story = build_report_story(visit_info, processed_items)
+    Story = build_report_story(visit_info, processed_items, logo_path) # Pass logo_path here
     
     doc.build(
         Story, 
@@ -242,24 +235,23 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
     return pdf_path, pdf_filename
 
 
-def build_report_story(visit_info, processed_items):
+def build_report_story(visit_info, processed_items, logo_path): # CRITICAL FIX: Added logo_path argument
     story = []
     
     # --- 1. Header and Title with Logo ---
-    # *** CHANGE 1: Added logo to the top header table. ***
     title_text = f"Site Visit Report - {visit_info.get('building_name', 'N/A')}"
-    title_paragraph = Paragraph(f"<b>{title_text}</b>", styles['BoldTitle']) # Bolding the title for better contrast
+    title_paragraph = Paragraph(f"<b>{title_text}</b>", styles['BoldTitle']) 
     
     logo_image = Paragraph('', styles['Normal'])
     try:
-        if os.path.exists(LOGO_PATH):
-            logo_image = Image(LOGO_PATH)
+        if os.path.exists(logo_path): # CRITICAL FIX: Use the passed logo_path
+            logo_image = Image(logo_path)
             # Adjusted size for A4 width
             logo_image.drawWidth = 1.0 * inch # Increased logo size slightly
             logo_image.drawHeight = 0.9 * inch 
             logo_image.hAlign = 'RIGHT' 
         else:
-            logger.warning(f"Logo file not found at: {LOGO_PATH}")
+            logger.warning(f"Logo file not found at: {logo_path}")
     except Exception as e:
         logger.warning(f"Failed to load logo image: {e}")
 
@@ -304,25 +296,10 @@ def build_report_story(visit_info, processed_items):
     story.append(Spacer(1, 0.2*inch))
 
     # --- NEW SECTION 2: Report Photo Items (Based on user selection) ---
-    # *** CHANGE 3: Added the new table for Report photo items ***
     story.extend(create_report_photo_items_table(visit_info, processed_items))
 
 
-    # --- ORIGINAL SECTION 3: Report Items (Now Section 3, but the numbering in the signature block will be 3) ---
-    # The original "Report Items" section is kept, but its number now starts after the new photo section.
-    # We will keep the original content structure but skip the title, as the Photo Items table already covers the important visuals.
-    # If the user needs the detailed item tables, we can re-add the title and re-number it.
-    
-    # Since the "Report Photo Items" table is now Section 2, let's update the original "Report Items" to be Section 3, 
-    # but the subsequent Signatures section must be Section 4, or we combine them.
-    
-    # Let's adjust the numbering:
-    # 1. Visit & Contact Details
-    # 2. Report Photo Items (NEW)
-    # 3. Report Items (Detailed Breakdown) (ORIGINAL)
-    # 4. Signatures
-    
-    # Re-adding the title for the original detailed report items
+    # --- ORIGINAL SECTION 3: Report Items (Detailed Breakdown) ---
     story.append(Paragraph('3. Report Items (Detailed Breakdown)', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
@@ -392,7 +369,6 @@ def build_report_story(visit_info, processed_items):
         story.append(Paragraph("No report items were added to this visit.", styles['Normal']))
 
     # --- BLOCK 4: Signatures (Now section 4) ---
-    # *** CHANGE 2: Removed the "3. General Notes" section and updated the section number for Signatures. ***
     story.extend(create_signature_table(visit_info))
     
     return story
