@@ -114,17 +114,15 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
 def create_report_photo_items_table(visit_info, processed_items):
     """
     Creates the 'Report Photo Items' table (Section 2).
-    Displays only the first photo of the first item that has a photo, 
-    along with simplified item details (Item #, Asset, System, and Description).
+    Displays the first photo of *every item* that has a photo, 
+    along with simplified item details.
     """
     
-    # Determine the desired image size for the first column
-    # MODIFIED: Reduced image column width to 1.75 inch
+    # Column Widths
     IMG_COL_WIDTH = 1.75 * inch
     IMG_WIDTH = 1.75 * inch  
     IMG_HEIGHT = 1.3 * inch  
     
-    # Calculate the remaining width for the details column
     PAGE_WIDTH = 7.27 * inch 
     DETAILS_COL_WIDTH = PAGE_WIDTH - IMG_COL_WIDTH
     
@@ -136,7 +134,7 @@ def create_report_photo_items_table(visit_info, processed_items):
         ]
     ]
 
-    # Initialize TableStyle with all common commands
+    # Initialize TableStyle commands
     header_style_commands = [
         ('BACKGROUND', (0, 0), (-1, 0), ACCENT_BG_COLOR),
         ('TEXTCOLOR', (0, 0), (-1, 0), BRAND_COLOR),
@@ -148,18 +146,18 @@ def create_report_photo_items_table(visit_info, processed_items):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
     ]
 
-    has_first_photo_item = False
+    has_photos = False
     
-    # Find the first item that has an image
+    # LOOP THROUGH ALL ITEMS (No 'break' here, we want all items)
     for i, item in enumerate(processed_items):
         if item.get('image_paths') and os.path.exists(item['image_paths'][0]):
-            has_first_photo_item = True
+            has_photos = True
             
-            # Use the first image path
+            # Use the FIRST image path only
             img_path = item['image_paths'][0] 
             item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
             
-            # Only include Item #, Asset, System, and Description
+            # Item details summary (Item #, Asset, System, and Description)
             details_text = f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}<br/>"
             details_text += f"Description: {item['description']}"
             
@@ -167,25 +165,20 @@ def create_report_photo_items_table(visit_info, processed_items):
             
             table_data.append([item_image, details_para])
             
-            # We use BREAK here to ensure only the first item summary is in Section 2.
-            break
+            # We explicitly DO NOT use 'break' here so all items with a first photo are listed.
 
-    if not has_first_photo_item:
-        # If no items are selected/have photos, show a clearer placeholder row
+    if not has_photos:
+        # If no items have photos, show a clearer placeholder row
         table_data.append([
             Paragraph('', styles['Normal']), 
             Paragraph('No items with photos were selected for this report section.', styles['Normal'])
         ])
-        
-        photo_table = Table(table_data, colWidths=[IMG_COL_WIDTH, DETAILS_COL_WIDTH])
-        
-    else:
-        # Use the modified column widths
-        photo_table = Table(table_data, colWidths=[IMG_COL_WIDTH, DETAILS_COL_WIDTH])
+    
+    photo_table = Table(table_data, colWidths=[IMG_COL_WIDTH, DETAILS_COL_WIDTH])
 
     # Applying styles for content rows (index 1 to the end)
     if len(table_data) > 1:
-        # 1. Padding around the image in the first column to prevent overlap with grid lines.
+        # 1. Padding around the image column cells (index 0, starting from row 1)
         header_style_commands.append(('LEFTPADDING', (0, 1), (0, -1), 5)) 
         header_style_commands.append(('RIGHTPADDING', (0, 1), (0, -1), 5))
         header_style_commands.append(('TOPPADDING', (0, 1), (0, -1), 5))
@@ -321,8 +314,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(details_table)
     story.append(Spacer(1, 0.2*inch))
 
-    # --- SECTION 2: Report Photo Items (For the main image) ---
-    # This section remains a summary (only the first item's first photo)
+    # --- SECTION 2: Report Photo Items (Now includes the first photo of all items) ---
     story.extend(create_report_photo_items_table(visit_info, processed_items))
 
 
@@ -357,21 +349,26 @@ def build_report_story(visit_info, processed_items, logo_path):
             ]))
             story.append(item_table)
             
-            # --- ADDING ALL PHOTOS HERE ---
-            if item.get('image_paths'):
+            # --- ADDING ONLY EXTRA PHOTOS HERE ---
+            # Check if there are more than 1 photo (i.e., if image_paths[1:] exists)
+            if item.get('image_paths') and len(item['image_paths']) > 1:
+                
+                # Get all paths EXCEPT the first one (which is in Section 2)
+                extra_image_paths = item['image_paths'][1:] 
+
                 story.append(Spacer(1, 0.1 * inch))
                 story.append(Paragraph("<b>All Photos:</b>", styles['Question']))
                 story.append(Spacer(1, 0.05 * inch))
                 
                 photo_elements = []
-                for img_path in item['image_paths']:
+                for img_path in extra_image_paths:
                     # Use a smaller size for the detailed breakdown images
                     photo = get_image_from_path(img_path, 1.5 * inch, 1.2 * inch, placeholder_text="Image Missing")
                     photo_elements.append(photo)
                 
                 # Arrange photos in a single row table
                 if photo_elements:
-                    # Column width is calculated to fit 4 images comfortably in the 7.27 inch width
+                    # Column width is calculated to fit multiple images horizontally
                     photo_grid_table = Table([photo_elements], colWidths=[1.8175 * inch] * len(photo_elements))
                     photo_grid_table.setStyle(TableStyle([
                         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
