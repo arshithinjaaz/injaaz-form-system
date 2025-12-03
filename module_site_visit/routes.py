@@ -21,6 +21,11 @@ GENERATED_DIR_NAME = "generated"
 GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
 IMAGE_UPLOAD_DIR = os.path.join(GENERATED_DIR, "images")
 
+# --- CRITICAL FIX 1: Define Absolute Path for Logo ---
+# Assuming 'static' folder is parallel to the 'site_visit_bp' folder (i.e., in BASE_DIR)
+LOGO_ABSOLUTE_PATH = os.path.join(BASE_DIR, 'static', 'INJAAZ.png') 
+# --- END LOGO PATH ---
+
 
 # Define the Blueprint
 site_visit_bp = Blueprint(
@@ -40,6 +45,10 @@ def save_base64_image(base64_data, filename_prefix):
         return None
         
     try:
+        # Check if the logo path exists here to help debug if it's missing
+        if not os.path.exists(LOGO_ABSOLUTE_PATH):
+            print(f"CRITICAL WARNING: Logo file NOT found at: {LOGO_ABSOLUTE_PATH}")
+
         if ',' in base64_data:
             base64_data = base64_data.split(',')[1]
         
@@ -84,16 +93,6 @@ def get_dropdown_data():
     except json.JSONDecodeError:
         print(f"ERROR: Could not decode JSON data in: {DROPDOWN_DATA_PATH}")
         return jsonify({"error": "Invalid JSON data"}), 500
-
-
-# =================================================================
-# 3. Route: File Download Endpoint
-#    ***REMOVED REDUNDANT ROUTE*** (The file serving is handled by download_generated 
-#    in Injaaz.py which serves from the /generated/ path.)
-# =================================================================
-# @site_visit_bp.route('/downloads/<filename>')
-# def download_file(filename):
-#    return send_from_directory(GENERATED_DIR, filename, as_attachment=True)
 
 
 # =================================================================
@@ -166,9 +165,9 @@ def submit():
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
         
         # -----------------------------------------------------------------
-        # --- 6. Generate PDF Report ---
+        # --- 6. Generate PDF Report (CRITICAL FIX 2: Pass the logo path) ---
         # -----------------------------------------------------------------
-        pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
+        pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR, logo_path=LOGO_ABSOLUTE_PATH)
         
         # --- 7. Send Email ---
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')}"
