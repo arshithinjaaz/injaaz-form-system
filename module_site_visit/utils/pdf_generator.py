@@ -156,10 +156,9 @@ def create_report_photo_items_table(visit_info, processed_items):
             img_path = item['image_paths'][0] 
             item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
             
-            # --- MODIFICATION: Only include Item #, Asset, System, and Description ---
+            # Only include Item #, Asset, System, and Description
             details_text = f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}<br/>"
             details_text += f"Description: {item['description']}"
-            # Removed: Quantity, Brand/Model, Comments
             
             details_para = Paragraph(details_text, styles['Answer'])
             
@@ -244,6 +243,9 @@ def generate_visit_pdf(visit_info, processed_items, output_dir, logo_path):
 def build_report_story(visit_info, processed_items, logo_path):
     story = []
     
+    # Use A4 width (8.27 inches) minus margins (0.5 + 0.5 = 1.0 inch) gives 7.27 inch for table width
+    PAGE_WIDTH = 7.27 * inch 
+
     # --- 1. Header and Title with Logo ---
     title_text = f"Site Visit Report - {visit_info.get('building_name', 'N/A')}"
     title_paragraph = Paragraph(f"<b>{title_text}</b>", styles['BoldTitle']) 
@@ -263,8 +265,6 @@ def build_report_story(visit_info, processed_items, logo_path):
     except Exception as e:
         logger.error(f"Failed to load logo image: {e}")
 
-    # Use A4 width (8.27 inches) minus margins (0.5 + 0.5 = 1.0 inch) gives 7.27 inch for table width
-    PAGE_WIDTH = 7.27 * inch 
     
     header_data = [[title_paragraph, logo_image]]
     # Increased the logo column width to 1.5 inch for a better-sized logo
@@ -304,6 +304,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(Spacer(1, 0.2*inch))
 
     # --- SECTION 2: Report Photo Items (For the main image) ---
+    # This section remains, showing the main item photo and simplified details.
     story.extend(create_report_photo_items_table(visit_info, processed_items))
 
 
@@ -338,34 +339,7 @@ def build_report_story(visit_info, processed_items, logo_path):
             story.append(item_table)
             story.append(Spacer(1, 0.1*inch))
             
-            # Photos for this item (if available) - MODIFIED: Removed label table and grid around photos
-            if item.get('image_paths'):
-                
-                # MODIFICATION: Replaced header box/table with simple Paragraph
-                story.append(Paragraph('All Photos:', styles['Normal'])) 
-
-                image_elements = []
-                for path in item['image_paths']:
-                    # Use a slightly smaller size for images inside the detailed breakdown
-                    img = get_image_from_path(path, 1.8 * inch, 1.3 * inch, placeholder_text="Photo N/A") 
-                    image_elements.append(img)
-
-                # Arrange images into rows of 3
-                num_cols = 3
-                col_width = PAGE_WIDTH / num_cols 
-                rows = [image_elements[k:k + num_cols] for k in range(0, len(image_elements), num_cols)]
-                
-                if rows:
-                    photo_table = Table(rows, colWidths=[col_width] * num_cols)
-                    photo_table.setStyle(TableStyle([
-                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('TOPPADDING', (0, 0), (-1, -1), 5),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                        # MODIFICATION: Grid line removed from photo table
-                        # ('GRID', (0,0), (-1,-1), 0.25, colors.lightgrey), 
-                    ]))
-                    story.append(photo_table)
+            # --- MODIFICATION: Entire "All Photos" block removed from Section 3 ---
             
             story.append(Spacer(1, 0.3 * inch))
 
