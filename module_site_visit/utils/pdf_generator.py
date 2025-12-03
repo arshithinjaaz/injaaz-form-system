@@ -133,7 +133,7 @@ def create_report_photo_items_table(visit_info, processed_items):
         ]
     ]
 
-    # Style for the header row and general table style
+    # Style for the header row
     header_style = TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), ACCENT_BG_COLOR),
         ('TEXTCOLOR', (0, 0), (-1, 0), BRAND_COLOR),
@@ -144,12 +144,6 @@ def create_report_photo_items_table(visit_info, processed_items):
         ('TOPPADDING', (0, 0), (-1, -1), 5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
     ])
-    
-    # New Style for Content Rows (Index 1 onwards)
-    content_style = TableStyle([
-        ('VALIGN', (0, 1), (-1, -1), 'MIDDLE'), # CRITICAL FIX: Set vertical alignment to MIDDLE for content
-    ])
-    header_style.addCommands(content_style.getCommands()) # Merge the styles
 
     has_first_photo_item = False
     
@@ -310,6 +304,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(Spacer(1, 0.2*inch))
 
     # --- SECTION 2: Report Photo Items (For the main image) ---
+    # This section remains, showing the main item photo and simplified details.
     story.extend(create_report_photo_items_table(visit_info, processed_items))
 
 
@@ -340,11 +335,12 @@ def build_report_story(visit_info, processed_items, logo_path):
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('GRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
                 ('LEFTPADDING', (0,0), (-1,-1), 6),
-                # FIX for Section 3: Increased bottom padding for better separation
-                ('BOTTOMPADDING', (0, 1), (0, 1), 6), 
-                ('BOTTOMPADDING', (2, 1), (2, 1), 6), 
             ]))
             story.append(item_table)
+            story.append(Spacer(1, 0.1*inch))
+            
+            # --- MODIFICATION: Entire "All Photos" block removed from Section 3 ---
+            
             story.append(Spacer(1, 0.3 * inch))
 
     else:
