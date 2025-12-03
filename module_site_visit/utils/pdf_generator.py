@@ -119,11 +119,14 @@ def create_report_photo_items_table(visit_info, processed_items):
     """
     
     # Determine the desired image size for the first column
-    IMG_WIDTH = 2.0 * inch
-    IMG_HEIGHT = 1.5 * inch
+    # *** MODIFICATION HERE: Reduced image column width from 2.0 to 1.75 inch ***
+    IMG_COL_WIDTH = 1.75 * inch
+    IMG_WIDTH = 1.75 * inch  # Image size matches the column width
+    IMG_HEIGHT = 1.3 * inch  # Adjusted height for 1.75 width for better ratio
+    
     # Calculate the remaining width for the details column
     PAGE_WIDTH = 7.27 * inch 
-    DETAILS_COL_WIDTH = PAGE_WIDTH - IMG_WIDTH
+    DETAILS_COL_WIDTH = PAGE_WIDTH - IMG_COL_WIDTH
     
     # Header row
     table_data = [
@@ -134,7 +137,6 @@ def create_report_photo_items_table(visit_info, processed_items):
     ]
 
     # Initialize TableStyle with all common commands
-    # Note: Using small padding values (1-2) here might be safer initially.
     header_style_commands = [
         ('BACKGROUND', (0, 0), (-1, 0), ACCENT_BG_COLOR),
         ('TEXTCOLOR', (0, 0), (-1, 0), BRAND_COLOR),
@@ -155,6 +157,7 @@ def create_report_photo_items_table(visit_info, processed_items):
             
             # Use the first image path
             img_path = item['image_paths'][0] 
+            # Note: We use IMG_WIDTH/IMG_HEIGHT for the actual image drawing size
             item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
             
             # Only include Item #, Asset, System, and Description
@@ -175,15 +178,15 @@ def create_report_photo_items_table(visit_info, processed_items):
             Paragraph('No items with photos were selected for this report section.', styles['Normal'])
         ])
         
-        photo_table = Table(table_data, colWidths=[IMG_WIDTH, DETAILS_COL_WIDTH])
+        photo_table = Table(table_data, colWidths=[IMG_COL_WIDTH, DETAILS_COL_WIDTH])
         
     else:
-        photo_table = Table(table_data, colWidths=[IMG_WIDTH, DETAILS_COL_WIDTH])
+        # Use the modified column widths
+        photo_table = Table(table_data, colWidths=[IMG_COL_WIDTH, DETAILS_COL_WIDTH])
 
     # Applying styles for content rows (index 1 to the end)
     if len(table_data) > 1:
-        # 1. CRITICAL FIX: Add padding around the image in the first column to prevent overlap.
-        # This will push the image away from the cell borders/grid lines.
+        # 1. Padding around the image in the first column to prevent overlap with grid lines.
         header_style_commands.append(('LEFTPADDING', (0, 1), (0, -1), 5)) 
         header_style_commands.append(('RIGHTPADDING', (0, 1), (0, -1), 5))
         header_style_commands.append(('TOPPADDING', (0, 1), (0, -1), 5))
