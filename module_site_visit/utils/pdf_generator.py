@@ -133,8 +133,8 @@ def create_report_photo_items_table(visit_info, processed_items):
         ]
     ]
 
-    # Style for the header row
-    header_style = TableStyle([
+    # Initialize TableStyle with all common commands
+    header_style_commands = [
         ('BACKGROUND', (0, 0), (-1, 0), ACCENT_BG_COLOR),
         ('TEXTCOLOR', (0, 0), (-1, 0), BRAND_COLOR),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
@@ -143,7 +143,7 @@ def create_report_photo_items_table(visit_info, processed_items):
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('TOPPADDING', (0, 0), (-1, -1), 5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-    ])
+    ]
 
     has_first_photo_item = False
     
@@ -179,7 +179,13 @@ def create_report_photo_items_table(visit_info, processed_items):
     else:
         photo_table = Table(table_data, colWidths=[IMG_WIDTH, DETAILS_COL_WIDTH])
 
-    photo_table.setStyle(header_style)
+    # CRITICAL FIX: Add vertical alignment for all data rows (row index 1 to the end)
+    # This ensures the text is centered next to the image.
+    if len(table_data) > 1:
+        header_style_commands.append(('VALIGN', (0, 1), (-1, -1), 'MIDDLE'))
+        header_style_commands.append(('LEFTPADDING', (1, 1), (-1, -1), 10)) # Add left padding to the text column
+
+    photo_table.setStyle(TableStyle(header_style_commands))
     
     story = []
     story.append(Paragraph('2. Report photo items', styles['BoldTitle']))
@@ -304,7 +310,6 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(Spacer(1, 0.2*inch))
 
     # --- SECTION 2: Report Photo Items (For the main image) ---
-    # This section remains, showing the main item photo and simplified details.
     story.extend(create_report_photo_items_table(visit_info, processed_items))
 
 
@@ -335,12 +340,10 @@ def build_report_story(visit_info, processed_items, logo_path):
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('GRID', (0,0), (-1,-1), 0.25, colors.lightgrey),
                 ('LEFTPADDING', (0,0), (-1,-1), 6),
+                # Ensure the cells have enough vertical space
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 6), 
             ]))
             story.append(item_table)
-            story.append(Spacer(1, 0.1*inch))
-            
-            # --- MODIFICATION: Entire "All Photos" block removed from Section 3 ---
-            
             story.append(Spacer(1, 0.3 * inch))
 
     else:
