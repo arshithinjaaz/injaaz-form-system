@@ -134,6 +134,7 @@ def create_report_photo_items_table(visit_info, processed_items):
     ]
 
     # Initialize TableStyle with all common commands
+    # Note: Using small padding values (1-2) here might be safer initially.
     header_style_commands = [
         ('BACKGROUND', (0, 0), (-1, 0), ACCENT_BG_COLOR),
         ('TEXTCOLOR', (0, 0), (-1, 0), BRAND_COLOR),
@@ -179,11 +180,20 @@ def create_report_photo_items_table(visit_info, processed_items):
     else:
         photo_table = Table(table_data, colWidths=[IMG_WIDTH, DETAILS_COL_WIDTH])
 
-    # CRITICAL FIX: Add vertical alignment for all data rows (row index 1 to the end)
-    # This ensures the text is centered next to the image.
+    # Applying styles for content rows (index 1 to the end)
     if len(table_data) > 1:
+        # 1. CRITICAL FIX: Add padding around the image in the first column to prevent overlap.
+        # This will push the image away from the cell borders/grid lines.
+        header_style_commands.append(('LEFTPADDING', (0, 1), (0, -1), 5)) 
+        header_style_commands.append(('RIGHTPADDING', (0, 1), (0, -1), 5))
+        header_style_commands.append(('TOPPADDING', (0, 1), (0, -1), 5))
+        header_style_commands.append(('BOTTOMPADDING', (0, 1), (0, -1), 5))
+
+        # 2. Vertical alignment for all data rows (row index 1 to the end)
         header_style_commands.append(('VALIGN', (0, 1), (-1, -1), 'MIDDLE'))
-        header_style_commands.append(('LEFTPADDING', (1, 1), (-1, -1), 10)) # Add left padding to the text column
+        
+        # 3. Left padding for the text column
+        header_style_commands.append(('LEFTPADDING', (1, 1), (-1, -1), 10)) 
 
     photo_table.setStyle(TableStyle(header_style_commands))
     
