@@ -2,16 +2,16 @@ import os
 import time
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
+# NOTE: Image is imported here and expects a file path or a file-like object
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from datetime import datetime
 import logging
-import io # <-- NEW: Import for in-memory handling
+# import io # <-- REMOVED: No longer needed for file reading
 
 # --- Logging Configuration ---
 logger = logging.getLogger(__name__)
-# Set a basic logging level for clarity in logs
 logger.setLevel(logging.INFO)
 
 # --- CONFIGURATION & BRANDING ---
@@ -21,11 +21,8 @@ ACCENT_BG_COLOR = colors.HexColor('#F2FBF8') # Lighter shade for table headers
 GRID_COLOR = colors.HexColor('#CCCCCC')
 
 # NOTE: The logo path must be accessible from where this script runs.
-# Adjusted path to handle the Render deployment issue (absolute path within the container)
-# Assumes structure: /app/module_site_visit/static/INJAAZ.png
 try:
     # Use the absolute path structure reliable for Render deployments
-    # Adjust this path if your project structure on the server is different
     LOGO_PATH = os.path.join('/app', 'module_site_visit', 'static', 'INJAAZ.png')
     if not os.path.exists(LOGO_PATH):
         # Fallback to the original relative path definition
@@ -54,14 +51,14 @@ styles.add(ParagraphStyle(name='SmallText', fontName='Helvetica', fontSize=8, le
 # --- HELPER FUNCTIONS ---
 
 def get_sig_image_from_path(file_path, name):
-    """Loads signature from a file path into a ReportLab Image object using an in-memory stream."""
+    """
+    Loads signature from a file path into a ReportLab Image object. 
+    Now uses the file path directly for better memory efficiency.
+    """
     if file_path and os.path.exists(file_path):
         try:
-            # Eagerly read the file contents into memory (BytesIO)
-            with open(file_path, 'rb') as f:
-                img_data = io.BytesIO(f.read())
-                
-            sig_img = Image(img_data) # ReportLab accepts the BytesIO stream
+            # OPTIMIZATION: Use the file path directly
+            sig_img = Image(file_path)
             sig_img.drawHeight = 0.7 * inch
             sig_img.drawWidth = 2.5 * inch
             sig_img.hAlign = 'LEFT' 
@@ -73,15 +70,15 @@ def get_sig_image_from_path(file_path, name):
     return Paragraph(f'Unsigned: {name}', styles['Normal']) 
 
 def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
-    """Loads image from a file path into a ReportLab Image object using an in-memory stream."""
+    """
+    Loads image from a file path into a ReportLab Image object.
+    Now uses the file path directly for better memory efficiency.
+    """
     if not file_path or not os.path.exists(file_path):
         return Paragraph(f'<font size="8">{placeholder_text}</font>', styles['SmallText'])
     try:
-        # Eagerly read the file contents into memory (BytesIO)
-        with open(file_path, 'rb') as f:
-            img_data = io.BytesIO(f.read())
-
-        img = Image(img_data) # ReportLab accepts the BytesIO stream
+        # OPTIMIZATION: Use the file path directly
+        img = Image(file_path) 
         img.drawWidth = width
         img.drawHeight = height
         img.hAlign = 'CENTER' 
@@ -164,6 +161,9 @@ def page_layout_template(canvas, doc):
 
 def generate_visit_pdf(visit_info, processed_items, output_dir):
     
+    start_time = time.time() # Start timer
+    logger.info(f"PDF generation started for {visit_info.get('building_name', 'N/A')} at {datetime.now()}")
+
     building_name = visit_info.get('building_name', 'Unknown').replace(' ', '_')
     # Using time.time() for unique filename timestamp
     ts = int(time.time())
@@ -177,12 +177,16 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
                             
     Story = build_report_story(visit_info, processed_items)
     
+    # CRITICAL POINT FOR DELAY: PDF Build
     doc.build(
         Story, 
         onFirstPage=page_layout_template, 
         onLaterPages=page_layout_template
     )
     
+    end_time = time.time()
+    logger.info(f"PDF build finished in {end_time - start_time:.2f} seconds.") # End timer
+
     return pdf_path, pdf_filename
 
 
@@ -198,11 +202,8 @@ def build_report_story(visit_info, processed_items):
     # Attempt to load the Logo
     try:
         if os.path.exists(LOGO_PATH):
-            # Eagerly load logo into memory stream
-            with open(LOGO_PATH, 'rb') as f:
-                logo_data = io.BytesIO(f.read())
-
-            logo_img = Image(logo_data)
+            # OPTIMIZATION: Use the file path directly for the logo
+            logo_img = Image(LOGO_PATH)
             # Adjusted size for A4 width
             logo_img.drawWidth = 0.8 * inch 
             logo_img.drawHeight = 0.7 * inch 
@@ -259,7 +260,7 @@ def build_report_story(visit_info, processed_items):
     if processed_items:
         for i, item in enumerate(processed_items):
             # Item Details
-            story.append(Paragraph(f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}", styles['Question']))
+            story.append(Paragraph(f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']} / {item['description']}", styles['Question']))
             story.append(Spacer(1, 0.05*inch))
             
             # Details Table for each item
@@ -297,7 +298,7 @@ def build_report_story(visit_info, processed_items):
 
                 image_elements = []
                 for path in item['image_paths']:
-                    # Uses the corrected image loading function
+                    # Uses the corrected image loading function (now file-path based)
                     img = get_image_from_path(path, 2.2 * inch, 1.7 * inch, placeholder_text="Photo N/A")
                     image_elements.append(img)
 

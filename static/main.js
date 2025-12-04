@@ -497,6 +497,7 @@ window.onSubmit = async function(event) {
     // 5b. Append the actual File objects (photos)
     window.pendingItems.forEach((item, itemIndex) => {
         item.photos.forEach((file, photoIndex) => {
+            // Note: The file objects here are the smaller, compressed files from resizeImage
             const key = `photo-item-${itemIndex}-${photoIndex}`;
             finalFormData.append(key, file, file.name); 
         });
@@ -530,7 +531,6 @@ window.onSubmit = async function(event) {
             window.pendingItems = [];
             renderPendingItems();
             if (window.techPad) window.techPad.clear();
-            // 🐛 FIX: Corrected typo (was window.opPad)
             if (window.opManPad) window.opManPad.clear(); 
             
             // Reset the form fields
@@ -541,7 +541,7 @@ window.onSubmit = async function(event) {
                 technicianNameInput.value = technicianNameBeforeReset;
                 technicianNameInput.dispatchEvent(new Event('input'));
                 
-                // ✨ FIX: Update the signature name displays after form reset
+                // Update the signature name displays after form reset
                 document.getElementById("techNameDisplay").innerText = technicianNameBeforeReset || "Technician Name";
                 document.getElementById("opManNameDisplay").innerText = opManNameBeforeReset || "Operation Manager Name";
             }
@@ -574,4 +574,4 @@ window.onSubmit = async function(event) {
             submitButton.disabled = false;
         }
     }
-}``
+}
