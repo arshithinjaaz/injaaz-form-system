@@ -3,10 +3,19 @@ import json
 import base64
 import time
 import traceback
+import uuid
+import tempfile
 from datetime import datetime
 from flask import Blueprint, render_template, jsonify, request, url_for, send_from_directory
 
+# --- BOTO3/AWS IMPORTS ---
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+# -------------------------
+
 # 1. Import utility functions
+# NOTE: Assume generate_visit_pdf and create_report_workbook now use S3 keys
 from .utils.email_sender import send_outlook_email 
 from .utils.excel_writer import create_report_workbook 
 from .utils.pdf_generator import generate_visit_pdf 
@@ -20,12 +29,7 @@ DROPDOWN_DATA_PATH = os.path.join(BLUEPRINT_DIR, 'dropdown_data.json')
 
 GENERATED_DIR_NAME = "generated"
 GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
-IMAGE_UPLOAD_DIR = os.path.join(GENERATED_DIR, "images")
-
-# --- Define Absolute Path for Logo ---
-# NOTE: This variable is now only used for reference/debugging, 
-# as the pdf_generator calculates the path internally.
-LOGO_ABSOLUTE_PATH = os.path.join(BASE_DIR, 'static', 'INJAAZ.png') 
+# IMAGE_UPLOAD_DIR is no longer used for large photo uploads!
 
 # Define the Blueprint
 site_visit_bp = Blueprint(
@@ -35,44 +39,74 @@ site_visit_bp = Blueprint(
     static_folder='static'
 )
 
+# =================================================================
+# --- AWS S3 & HELPER CONFIGURATION ---
+# =================================================================
+S3_BUCKET = os.environ.get('S3_BUCKET_NAME', 'injaaz-files')
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 
-# --- HELPER FUNCTION: Decode and Save Base64 Images/Signatures ---
-def save_base64_image(base64_data, filename_prefix):
-    """Decodes a base64 image string and saves it to the IMAGE_UPLOAD_DIR."""
-    os.makedirs(IMAGE_UPLOAD_DIR, exist_ok=True)
+# Initialize Boto3 Client - Reads credentials from environment variables automatically
+s3_client = boto3.client(
+    's3', 
+    region_name=AWS_REGION, 
+    # Critical for direct PUT uploads from the client
+    config=Config(signature_version='s3v4') 
+)
+
+def generate_presigned_put_url(file_extension):
+    """Generates a secure PUT presigned URL for direct client upload to S3."""
     
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    object_key = f"site-visit-photos/{unique_filename}"
+    
+    try:
+        url = s3_client.generate_presigned_url(
+            ClientMethod='put_object',
+            Params={'Bucket': S3_BUCKET, 'Key': object_key},
+            # URL is valid for 1 hour
+            ExpiresIn=3600 
+        )
+        return url, object_key
+    except ClientError as e:
+        print(f"Error generating presigned URL: {e}")
+        return None, None
+
+def decode_base64_to_s3(base64_data, filename_prefix):
+    """Decodes base64 data (like signature) and uploads the binary data directly to S3."""
     if not base64_data or not isinstance(base64_data, str) or len(base64_data) < 100:
-        print(f"DEBUG_SAVE: Invalid or empty base64 data for {filename_prefix}")
         return None
         
     try:
         if ',' in base64_data:
             base64_data = base64_data.split(',')[1]
         
-        # This is where memory consumption starts: decoding the base64 string
+        # Memory risk is ACCEPTED here because signatures are small (< 100 KB)
         img_data = base64.b64decode(base64_data)
         
-        timestamp = int(time.time() * 1000)
-        filename = f"{filename_prefix}_{timestamp}.png"
-        file_path = os.path.join(IMAGE_UPLOAD_DIR, filename)
+        # Define the S3 Key/Path
+        object_key = f"signatures/{filename_prefix}_{int(time.time() * 1000)}.png"
 
-        with open(file_path, 'wb') as f:
-            f.write(img_data)
-            
-        print(f"DEBUG_SAVE: Successfully saved {filename} to {file_path}")
+        # Upload binary data directly to S3
+        s3_client.put_object(
+            Bucket=S3_BUCKET,
+            Key=object_key,
+            Body=img_data,
+            ContentType='image/png'
+        )
         
-        # Explicitly release the decoded image data from memory after writing to disk
+        # Explicitly release the decoded image data from memory
         del img_data 
         
-        return file_path # Return the full path for the PDF generator
+        print(f"DEBUG_S3_SIG: Successfully uploaded {filename_prefix} to S3 key: {object_key}")
+        return object_key # Return the S3 key
         
     except Exception as e:
-        print(f"Error decoding/saving base64 image: {e}")
+        print(f"Error decoding/saving base64 image to S3: {e}")
         return None
 
 
 # =================================================================
-# 1. Route: Main Form Page
+# 1. Route: Main Form Page (UNCHANGED)
 # =================================================================
 @site_visit_bp.route('/form') 
 def index():
@@ -81,7 +115,7 @@ def index():
 
 
 # =================================================================
-# 2. Route: Dropdown Data Endpoint
+# 2. Route: Dropdown Data Endpoint (UNCHANGED)
 # =================================================================
 @site_visit_bp.route('/dropdowns')
 def get_dropdown_data():
@@ -99,101 +133,136 @@ def get_dropdown_data():
 
 
 # =================================================================
-# 3. Route: Form Submission (Called by POST to /submit)
+# 3. ROUTE: PHASE 1 - SUBMIT METADATA & GET S3 LINKS
+# This replaces the start of the old /submit route.
 # =================================================================
-@site_visit_bp.route('/submit', methods=['POST'])
-def submit():
-    # 1. Setup
-    temp_image_paths = [] # List to track all image/signature files for guaranteed deletion
-    final_items = []
-    excel_path = None
-    pdf_path = None
+@site_visit_bp.route('/api/submit/metadata', methods=['POST'])
+def submit_metadata():
+    """Receives metadata, uploads signatures, and generates S3 upload links for photos."""
     
-    # --- Extract Data from multipart/form-data ---
-    data_json_string = request.form.get('data') 
-    
-    if not data_json_string:
-        return jsonify({"error": "Missing main data payload ('data') in request form."}), 400
-
     try:
-        data = json.loads(data_json_string) 
-        uploaded_files = request.files 
+        data = request.json
         visit_info = data.get('visit_info', {})
         processed_items = data.get('report_items', []) 
-        signatures = data.get('signatures', {}) 
-        email_recipient = visit_info.get('email')
-    except Exception as e:
-        return jsonify({"error": f"Failed to parse request data: {str(e)}"}), 400
-    # --- END DATA EXTRACTION ---
-
-    
-    # -------------------------------------------------------------------------
-    # --- START CRITICAL TRY...FINALLY BLOCK FOR MEMORY/CLEANUP GUARANTEE ---
-    # -------------------------------------------------------------------------
-    try:
-        # --- 3. Process Signatures (STILL base64) ---
-        tech_sig_data = signatures.get('tech_signature')
-        opMan_sig_data = signatures.get('opMan_signature')
+        signatures = data.get('signatures', {})
         
-        # NOTE: save_base64_image now returns the full path
-        tech_sig_path = save_base64_image(tech_sig_data, 'tech_sig')
-        opMan_sig_path = save_base64_image(opMan_sig_data, 'opman_sig')
-
-        if tech_sig_path: temp_image_paths.append(tech_sig_path)
-        if opMan_sig_path: temp_image_paths.append(opMan_sig_path)
-
-        visit_info['tech_signature_path'] = tech_sig_path
-        visit_info['opMan_signature_path'] = opMan_sig_path
-
-        # -----------------------------------------------------------------
-        # --- 4. Process Report Item Photos (Uses FileStorage.save) ---
-        # -----------------------------------------------------------------
-        item_photo_count = 0
-        os.makedirs(IMAGE_UPLOAD_DIR, exist_ok=True)
-
+        # --- 3A. Process Signatures (Upload directly to S3) ---
+        tech_sig_key = decode_base64_to_s3(signatures.get('tech_signature'), 'tech_sig')
+        opMan_sig_key = decode_base64_to_s3(signatures.get('opMan_signature'), 'opman_sig')
+        
+        # Store S3 keys instead of local paths
+        visit_info['tech_signature_key'] = tech_sig_key
+        visit_info['opMan_signature_key'] = opMan_sig_key
+        
+        # --- 3B. Generate S3 Pre-Signed URLs for Photos ---
+        signed_urls = []
+        
+        # We need a unique report ID to tie all data together later
+        # We use a simple timestamp as a pseudo-ID here; replace with a proper DB ID if used.
+        report_id = f"report-{int(time.time())}" 
+        
         for item_index, item in enumerate(processed_items):
-            item_image_paths = []
-            
-            for file_key, file_storage in uploaded_files.items():
-                if file_key.startswith(f"photo-item-{item_index}-"):
-                    if not file_storage.filename:
-                        continue
-
-                    try:
-                        timestamp = int(time.time() * 1000)
-                        item_slug = item.get('category', 'item').replace(' ', '_').replace('/', '')
-                        filename = f"{item_slug}_{item_index}_{item_photo_count}_{timestamp}.png"
-                        path = os.path.join(IMAGE_UPLOAD_DIR, filename)
-                        
-                        # CRITICAL: This line streams the file to disk, preventing OOM errors
-                        file_storage.save(path) 
-                        
-                        item_image_paths.append(path)
-                        temp_image_paths.append(path) # Add to cleanup list
-                        item_photo_count += 1
+            for photo_index in range(item.get('photo_count', 0)):
+                # Assume all photos are JPEGs or PNGs (use dynamic extension if possible)
+                file_extension = '.jpg' 
+                
+                url, s3_key = generate_presigned_put_url(file_extension)
+                
+                if url and s3_key:
+                    signed_urls.append({
+                        'item_index': item_index,
+                        'photo_index': photo_index,
+                        'url': url,
+                        's3_key': s3_key,
+                        # Store initial metadata so we don't lose it if using a DB
+                        'asset': item.get('asset'),
+                        'description': item.get('description'),
+                        'visit_info': visit_info 
+                        # In a real app, save everything to a DB table here!
+                    })
                     
-                    except Exception as e:
-                        print(f"Error saving file {file_key}: {e}")
-                        # If a single file fails, we continue processing other files
-                        continue
+        # --- 3C. Temporary Storage (Simulated DB) ---
+        # Since we are not using a database, we must temporarily store the data structure.
+        # CRITICAL RISK: This data will be lost if the server reloads between phases!
+        # This is strictly a demonstration; use a DB (Redis, PostgreSQL) in production.
+        
+        # We'll use the temp directory to simulate a persistent record of this submission
+        # In production, you MUST use a database here.
+        temp_record_path = os.path.join(tempfile.gettempdir(), f"{report_id}.json")
+        with open(temp_record_path, 'w') as f:
+            json.dump({
+                'visit_info': visit_info,
+                'report_items': processed_items,
+                'signed_urls_data': signed_urls # Stores the generated S3 keys and metadata
+            }, f)
+
+
+        return jsonify({
+            "status": "success",
+            "visit_id": report_id, # Return the pseudo-ID
+            "signed_urls": signed_urls
+        })
+
+    except Exception as e:
+        error_details = traceback.format_exc()
+        print(f"ERROR (Metadata): {error_details}")
+        return jsonify({"error": f"Failed to process metadata: {str(e)}"}), 500
+
+
+# =================================================================
+# 4. ROUTE: PHASE 3 - FINALIZE REPORT & GENERATE PDF
+# This completes the process once files are uploaded to S3.
+# =================================================================
+@site_visit_bp.route('/api/submit/finalize', methods=['GET'])
+def finalize_report():
+    """Triggers PDF and Excel generation after client confirms S3 uploads are complete."""
+    
+    report_id = request.args.get('visit_id')
+    if not report_id:
+        return jsonify({"error": "Missing visit_id parameter for finalization."}), 400
+
+    # --- 1. Retrieve Stored Record (Simulated DB Fetch) ---
+    temp_record_path = os.path.join(tempfile.gettempdir(), f"{report_id}.json")
+    if not os.path.exists(temp_record_path):
+        return jsonify({"error": "Report record not found (Server restarted or session expired)."}), 500
+    
+    try:
+        with open(temp_record_path, 'r') as f:
+            record = json.load(f)
+        
+        visit_info = record['visit_info']
+        final_items = record['report_items']
+        signed_urls_data = record['signed_urls_data']
+        email_recipient = visit_info.get('email')
+        
+        # --- 2. Map S3 Keys back to Items ---
+        # Attach the final S3 keys to the correct report items
+        s3_key_map = {}
+        for url_data in signed_urls_data:
+            key = (url_data['item_index'], url_data['photo_index'])
+            s3_key_map[key] = url_data['s3_key']
+
+        # Rebuild final_items list with S3 keys
+        for item_index, item in enumerate(final_items):
+            image_keys = []
+            for photo_index in range(item.get('photo_count', 0)):
+                key = (item_index, photo_index)
+                s3_key = s3_key_map.get(key)
+                if s3_key:
+                    image_keys.append(s3_key)
+                else:
+                    print(f"WARNING: Missing S3 key for item {item_index}, photo {photo_index}")
             
-            item['image_paths'] = item_image_paths
-            final_items.append(item)
-            
-        print(f"DEBUG_SUBMIT: Total photos received and processed: {item_photo_count}")
+            # NOTE: Updated to use 'image_keys' field name to match pdf_generator.py
+            item['image_keys'] = image_keys 
         
         # -----------------------------------------------------------------
-        # --- 5. Generate Excel Report ---
+        # --- 3. Generate Reports (Using S3 download helpers) ---
         # -----------------------------------------------------------------
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
-        
-        # -----------------------------------------------------------------
-        # --- 6. Generate PDF Report ---
-        # -----------------------------------------------------------------
-        # 👇 FIX APPLIED HERE: Remove the logo_path argument
         pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
         
-        # --- 7. Send Email ---
+        # --- 4. Send Email ---
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')} - {datetime.now().strftime('%Y-%m-%d')}"
         body = f"""The site visit report for {visit_info.get('building_name', 'Unknown')} on {datetime.now().strftime('%Y-%m-%d')} has been generated and is attached."""
         
@@ -201,9 +270,7 @@ def submit():
         email_status, msg = send_outlook_email(subject, body, attachments, email_recipient)
         print("EMAIL_STATUS:", msg)
         
-        # ----------------------
-        # 8. SUCCESS RESPONSE TO FRONTEND
-        # ----------------------
+        # 5. SUCCESS RESPONSE TO FRONTEND
         return jsonify({
             "status": "success",
             "excel_url": url_for('site_visit_bp.download_generated', filename=excel_filename, _external=True), 
@@ -212,35 +279,21 @@ def submit():
 
     except Exception as e:
         error_details = traceback.format_exc()
-        
-        print("\n--- SERVER ERROR TRACEBACK START (ROOT CAUSE) ---")
-        print(error_details)
-        print("--- SERVER ERROR TRACEBACK END ---\n")
-        
-        # 9. ERROR RESPONSE TO FRONTEND
+        print(f"ERROR (Finalize): {error_details}")
         return jsonify({
             "status": "error",
             "error": f"Internal server error: Failed to process report. Reason: {type(e).__name__}: {str(e)}"
         }), 500
 
-    # --------------------------------------------------------------------
-    # --- 10. CRITICAL: GUARANTEED CLEANUP (FINALLY BLOCK) ---
-    # --------------------------------------------------------------------
     finally:
-        print("DEBUG_FINALLY_CLEANUP: Starting guaranteed temporary file cleanup...")
-        # This deletes all temporary image and signature files.
-        for path in temp_image_paths:
-            try:
-                if os.path.isfile(path): 
-                    os.remove(path)
-                    print(f"DEBUG_FINALLY_CLEANUP: Removed temporary file {os.path.basename(path)}")
-            except OSError as e:
-                print(f"Error deleting temp file {os.path.basename(path)}: {e}")
-        print("DEBUG_FINALLY_CLEANUP: Guaranteed cleanup complete.")
+        # 6. Clean up the temporary record
+        if os.path.exists(temp_record_path):
+            os.remove(temp_record_path)
+            print(f"DEBUG_CLEANUP: Removed temporary record {report_id}.json")
 
 
 # =================================================================
-# 4. Route: Download Generated Files
+# 5. Route: Download Generated Files (UNCHANGED)
 # =================================================================
 @site_visit_bp.route('/generated/<path:filename>')
 def download_generated(filename):

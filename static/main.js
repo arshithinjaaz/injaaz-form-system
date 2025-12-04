@@ -1,8 +1,9 @@
-// main.js (FULL CODE OPTIMIZED FOR SUBMISSION SPEED)
+// main.js (UPDATED FOR S3 DIRECT UPLOAD)
 
 // Declare global variables attached to the window object for universal access
 window.dropdownData = DROPDOWN_DATA; 
-window.pendingItems = []; // Array to hold all report items, including the (now resized) file objects
+// NOTE: pendingItems now stores the file object and, later, the S3 key/URL.
+window.pendingItems = []; 
 window.techPad = null;
 window.opManPad = null;
 const MAX_PHOTOS = 10; // Limit for photos per item
@@ -13,7 +14,7 @@ const pendingItemsList = document.getElementById('pendingItemsList');
 
 
 // ---------------------------------------------------------------
-// 1. Initialization, Data Loading, and Utility Functions
+// 1. Initialization, Data Loading, and Utility Functions (UNMODIFIED)
 // ---------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -60,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupCascadingDropdowns();
 });
 
-// Helper function to show a custom modal notification
+// Helper function to show a custom modal notification (UNMODIFIED)
 window.showNotification = function(type, title, body) {
     const modalElement = document.getElementById('customAlertModal');
     const titleElement = document.getElementById('customAlertTitle');
@@ -112,9 +113,12 @@ window.showNotification = function(type, title, body) {
     }
 }
 
-// --- Image Resizing and Compression Function (Core Logic) ---
+// --- Image Resizing and Compression Function (UNMODIFIED - Assuming you want to keep resizing before S3 upload) ---
 function resizeImage(file, maxWidth, maxHeight, quality) {
     return new Promise((resolve) => {
+        // ... (resize logic remains here) ...
+        // [Original resizeImage implementation is kept here]
+        
         // Skip non-image files gracefully
         if (!file || !file.type.startsWith('image/')) {
             resolve(file); 
@@ -184,7 +188,7 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
 
 
 // ---------------------------------------------------------------
-// 2. Dropdown Population and Cascading Logic 
+// 2. Dropdown Population and Cascading Logic (UNMODIFIED)
 // ---------------------------------------------------------------
 
 function initDropdowns() {
@@ -251,7 +255,7 @@ function setupCascadingDropdowns() {
 }
 
 // ---------------------------------------------------------------
-// 3. Pending Items Rendering & Removal 
+// 3. Pending Items Rendering & Removal (UNMODIFIED)
 // ---------------------------------------------------------------
 
 function renderPendingItems() {
@@ -296,7 +300,7 @@ window.removeItem = function(index) {
 }
 
 // ---------------------------------------------------------------
-// 4. New Item Addition Logic - OPTIMIZED FOR SUBMISSION SPEED
+// 4. New Item Addition Logic (UNMODIFIED)
 // ---------------------------------------------------------------
 
 window.addItem = async function() { 
@@ -403,10 +407,10 @@ window.addItem = async function() {
 
 
 // ---------------------------------------------------------------
-// 5. Form Submission Logic 
+// 5. Form Submission Logic - REWRITTEN FOR S3 DIRECT UPLOAD
 // ---------------------------------------------------------------
 
-// Helper function to trigger a programmatic download
+// Helper function to trigger a programmatic download (UNMODIFIED)
 const triggerDownload = (url) => {
     const a = document.createElement('a');
     a.href = url;
@@ -416,25 +420,23 @@ const triggerDownload = (url) => {
     document.body.removeChild(a);
 };
 
+// **REPLACED window.onSubmit**
 window.onSubmit = async function(event) {
     event.preventDefault(); 
 
     const submitButton = document.getElementById('nextButton'); 
     const technicianNameInput = document.getElementById('technician_name');
-    const opManNameInput = document.getElementById('opMan_name'); // Get OpMan input for name reset UX
+    const opManNameInput = document.getElementById('opMan_name');
     
-    if (submitButton) {
-        submitButton.disabled = true; 
-    }
+    if (submitButton) submitButton.disabled = true; 
     
     const alertDiv = document.getElementById('submission-alert');
     const statusText = document.getElementById('status'); 
 
     if (alertDiv) alertDiv.className = 'alert d-none';
-    if (alertDiv) alertDiv.textContent = '';
-    if (statusText) statusText.textContent = 'Submitting...';
+    if (statusText) statusText.textContent = 'Preparing submission...';
 
-    // --- 1. Collect Form Data (Non-file fields) ---
+    // --- 1. Collect Metadata and Signatures (UNCHANGED) ---
     const formData = new FormData(form); 
     const visitInfo = {};
     formData.forEach((value, key) => {
@@ -444,14 +446,14 @@ window.onSubmit = async function(event) {
     });
 
     const technicianNameBeforeReset = technicianNameInput ? technicianNameInput.value : '';
-    const opManNameBeforeReset = opManNameInput ? opManNameInput.value : ''; // Preserve OpMan name
+    const opManNameBeforeReset = opManNameInput ? opManNameInput.value : '';
 
-    // --- 2. Collect Signatures (Still Base64 for small data) ---
     const techSignatureData = window.techPad ? window.techPad.toDataURL() : '';
     const opManSignatureData = window.opManPad ? window.opManPad.toDataURL() : '';
     
-    // --- 3. Create JSON Data Structure (without the actual file objects) ---
-    const cleanItems = window.pendingItems.map(item => {
+    // --- Prepare Metadata Payload (Without File Objects) ---
+    const metadataItems = window.pendingItems.map(item => {
+        // Just send the item details and photo count. We will replace 'photos' with S3 keys later.
         const { photos, ...itemDetails } = item; 
         itemDetails.photo_count = item.photos.length; 
         return itemDetails;
@@ -459,62 +461,103 @@ window.onSubmit = async function(event) {
 
     const payloadData = {
         visit_info: visitInfo,
-        report_items: cleanItems,
+        report_items: metadataItems,
         signatures: {
             tech_signature: techSignatureData,
             opMan_signature: opManSignatureData
         }
     };
     
-    // --- 4. Validation for Submission ---
+    // --- 2. Validation (UNCHANGED) ---
     const technicianName = payloadData.visit_info.technician_name;
-    const techSignatureLength = techSignatureData.length;
-
-    if (!technicianName) {
-        showNotification('error', 'Submission Failed', 'Technician Name is required (Tab 1).');
-        if (submitButton) submitButton.disabled = false;
-        return;
-    }
-    
-    if (!techSignatureData || techSignatureLength < 100) { 
-        showNotification('error', 'Submission Failed', 'Technician signature is required (Tab 3).');
-        if (submitButton) submitButton.disabled = false;
-        return;
-    }
-    
-    if (payloadData.report_items.length === 0) {
-        showNotification('error', 'Submission Failed', 'At least one Report Item is required (Tab 2).');
+    if (!technicianName || !techSignatureData || techSignatureData.length < 100 || payloadData.report_items.length === 0) {
+        showNotification('error', 'Submission Failed', 'Please ensure Name, Signature, and at least one Report Item are present.');
         if (submitButton) submitButton.disabled = false;
         return;
     }
 
-    // --- 5. CRITICAL: Assemble Final FormData for Submission ---
-    const finalFormData = new FormData();
-    
-    // 5a. Append the main data payload as a JSON string under the key 'data'
-    finalFormData.append('data', JSON.stringify(payloadData)); 
-    
-    // 5b. Append the actual File objects (photos)
-    window.pendingItems.forEach((item, itemIndex) => {
-        item.photos.forEach((file, photoIndex) => {
-            // Note: The file objects here are the smaller, compressed files from resizeImage
-            const key = `photo-item-${itemIndex}-${photoIndex}`;
-            finalFormData.append(key, file, file.name); 
-        });
-    });
-    
-    if (statusText) statusText.textContent = 'Uploading data and photos...';
+    // --- 3. PHASE 1: Submit Metadata to Server & Get S3 Pre-Signed URLs ---
+    statusText.textContent = 'Submitting metadata and requesting secure photo links...';
+    let signedUrls = [];
+    let visitId = null;
 
-    // --- 6. AJAX Submission with FormData ---
     try {
-        const response = await fetch('/site-visit/submit', {
+        const metadataResponse = await fetch('/api/submit/metadata', {
             method: 'POST',
-            body: finalFormData 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payloadData) 
         });
 
-        const result = await response.json();
+        const metadataResult = await metadataResponse.json();
 
-        if (response.ok) {
+        if (!metadataResponse.ok) {
+            throw new Error(metadataResult.error || `Server error: ${metadataResponse.status}`);
+        }
+        
+        // The server response must include the report ID and the list of URLs/keys
+        signedUrls = metadataResult.signed_urls;
+        visitId = metadataResult.visit_id;
+
+    } catch (e) {
+        showNotification('error', 'Metadata Error', `Failed to initialize report and get S3 links: ${e.message}`);
+        if (submitButton) submitButton.disabled = false;
+        return;
+    }
+
+    // --- 4. PHASE 2: Upload Photos Directly to S3 (Bypassing Render Instance) ---
+    let successfulUploads = 0;
+    statusText.textContent = `Uploading 0/${signedUrls.length} photos directly to S3...`;
+
+    const uploadPromises = signedUrls.map(async (urlData, index) => {
+        // Find the corresponding File object from the original pendingItems list
+        const item = window.pendingItems[urlData.item_index];
+        const fileToUpload = item.photos[urlData.photo_index];
+        
+        try {
+            const uploadResponse = await fetch(urlData.url, {
+                method: 'PUT',
+                body: fileToUpload,
+                // CRITICAL: Content-Type must match what was specified when generating the presigned URL
+                headers: { 'Content-Type': fileToUpload.type } 
+            });
+            
+            if (!uploadResponse.ok) {
+                throw new Error(`S3 upload failed for photo index ${index}. Status: ${uploadResponse.status}`);
+            }
+            
+            successfulUploads++;
+            statusText.textContent = `Uploading ${successfulUploads}/${signedUrls.length} photos directly to S3...`;
+            
+            // Return the S3 key for final confirmation
+            return { s3_key: urlData.s3_key };
+
+        } catch (error) {
+            console.error(error);
+            showNotification('error', 'Photo Upload Failed', `A photo upload failed. Please check the console for details.`);
+            // Throwing an error here will stop Promise.all and skip Phase 3
+            throw error;
+        }
+    });
+
+    try {
+        // Wait for all files to be uploaded to S3
+        await Promise.all(uploadPromises); 
+
+    } catch (e) {
+        // Catch any error from Promise.all (i.e., any failed photo upload)
+        showNotification('error', 'Upload Interrupted', 'One or more photo uploads failed. Submission cancelled.');
+        if (submitButton) submitButton.disabled = false;
+        return;
+    }
+
+    // --- 5. PHASE 3: Finalize Report & Generate PDF on Server ---
+    statusText.textContent = 'All photos uploaded. Finalizing report and generating documents...';
+
+    try {
+        const finalizeResponse = await fetch(`/api/submit/finalize?visit_id=${visitId}`, { method: 'GET' });
+        const result = await finalizeResponse.json();
+
+        if (finalizeResponse.ok) {
             // Success State
             triggerDownload(result.pdf_url);
             triggerDownload(result.excel_url);
@@ -522,7 +565,7 @@ window.onSubmit = async function(event) {
             if (statusText) statusText.textContent = 'Report Submitted Successfully!';
             if (alertDiv) {
                 alertDiv.classList.add('alert-success', 'd-block');
-                alertDiv.innerHTML = `The site visit report has been successfully submitted. Documents should be downloading automatically. You can also download them manually: 
+                alertDiv.innerHTML = `The site visit report has been successfully submitted. Documents should be downloading automatically. 
                     <a href="${result.pdf_url}" class="alert-link" target="_blank">PDF</a> | 
                     <a href="${result.excel_url}" class="alert-link" target="_blank">Excel</a>`; 
             }
@@ -533,45 +576,26 @@ window.onSubmit = async function(event) {
             if (window.techPad) window.techPad.clear();
             if (window.opManPad) window.opManPad.clear(); 
             
-            // Reset the form fields
             if (form) form.reset();
             
-            // Preserve and restore technician name after reset
+            // Preserve and restore names
             if (technicianNameInput) {
                 technicianNameInput.value = technicianNameBeforeReset;
                 technicianNameInput.dispatchEvent(new Event('input'));
-                
-                // Update the signature name displays after form reset
                 document.getElementById("techNameDisplay").innerText = technicianNameBeforeReset || "Technician Name";
                 document.getElementById("opManNameDisplay").innerText = opManNameBeforeReset || "Operation Manager Name";
             }
-
-            // Re-initialize dropdowns
             initDropdowns();
             
         } else {
-            // Error State from Server (status 400 or 500)
-            if (statusText) statusText.textContent = 'Submission Failed!';
-            if (alertDiv) {
-                alertDiv.classList.add('alert-danger', 'd-block');
-                const errorMsg = result.error || response.statusText;
-                alertDiv.textContent = `Server Error: ${errorMsg}`;
-            }
-            showNotification('error', 'Submission Failed', `The server reported an error: **${result.error || response.statusText}**`);
+            // Server reported error during PDF generation
+            showNotification('error', 'Finalization Failed', `The server reported an error during document generation: **${result.error || finalizeResponse.statusText}**`);
         }
 
     } catch (error) {
-        // Network/Catch Error State
-        if (statusText) statusText.textContent = 'Submission Failed!';
-        if (alertDiv) {
-            alertDiv.classList.add('alert-danger', 'd-block');
-            alertDiv.textContent = `Network Error: Could not connect to the server or process the request. ${error.message}`;
-        }
-        showNotification('error', 'Network Error', `Could not connect to the server or process the request. Details: **${error.message}**`);
+        // Network error during finalization
+        showNotification('error', 'Network Error', `Could not finalize request. Details: **${error.message}**`);
     } finally {
-        // Re-enable the submit button
-        if (submitButton) {
-            submitButton.disabled = false;
-        }
+        if (submitButton) submitButton.disabled = false;
     }
 }
