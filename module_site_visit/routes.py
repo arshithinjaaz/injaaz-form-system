@@ -3,7 +3,7 @@ import json
 import base64
 import time
 import traceback
-from datetime import datetime # Added datetime import for use in subject line
+from datetime import datetime
 from flask import Blueprint, render_template, jsonify, request, url_for, send_from_directory
 
 # 1. Import utility functions
@@ -23,6 +23,8 @@ GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
 IMAGE_UPLOAD_DIR = os.path.join(GENERATED_DIR, "images")
 
 # --- Define Absolute Path for Logo ---
+# NOTE: This variable is now only used for reference/debugging, 
+# as the pdf_generator calculates the path internally.
 LOGO_ABSOLUTE_PATH = os.path.join(BASE_DIR, 'static', 'INJAAZ.png') 
 
 # Define the Blueprint
@@ -62,7 +64,7 @@ def save_base64_image(base64_data, filename_prefix):
         # Explicitly release the decoded image data from memory after writing to disk
         del img_data 
         
-        return filename
+        return file_path # Return the full path for the PDF generator
         
     except Exception as e:
         print(f"Error decoding/saving base64 image: {e}")
@@ -133,11 +135,9 @@ def submit():
         tech_sig_data = signatures.get('tech_signature')
         opMan_sig_data = signatures.get('opMan_signature')
         
-        tech_sig_filename = save_base64_image(tech_sig_data, 'tech_sig')
-        opMan_sig_filename = save_base64_image(opMan_sig_data, 'opman_sig')
-
-        tech_sig_path = os.path.join(IMAGE_UPLOAD_DIR, tech_sig_filename) if tech_sig_filename else None
-        opMan_sig_path = os.path.join(IMAGE_UPLOAD_DIR, opMan_sig_filename) if opMan_sig_filename else None
+        # NOTE: save_base64_image now returns the full path
+        tech_sig_path = save_base64_image(tech_sig_data, 'tech_sig')
+        opMan_sig_path = save_base64_image(opMan_sig_data, 'opman_sig')
 
         if tech_sig_path: temp_image_paths.append(tech_sig_path)
         if opMan_sig_path: temp_image_paths.append(opMan_sig_path)
@@ -190,7 +190,8 @@ def submit():
         # -----------------------------------------------------------------
         # --- 6. Generate PDF Report ---
         # -----------------------------------------------------------------
-        pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR, logo_path=LOGO_ABSOLUTE_PATH)
+        # 👇 FIX APPLIED HERE: Remove the logo_path argument
+        pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
         
         # --- 7. Send Email ---
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')} - {datetime.now().strftime('%Y-%m-%d')}"
