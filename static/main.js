@@ -1,10 +1,8 @@
-// main.js (FULL AND CORRECTED for FormData Uploads)
+// main.js (FULL AND CORRECTED with Image Resizing and Compression)
 
 // Declare global variables attached to the window object for universal access
-// We initialize window.dropdownData by referencing the global constant DROPDOWN_DATA,
-// which must be loaded by the 'dropdown_data.js' script *before* this file runs.
-window.dropdownData = DROPDOWN_DATA; // CRITICAL CHANGE: Assign the global constant here
-window.pendingItems = []; // Array to hold all report items, including file objects
+window.dropdownData = DROPDOWN_DATA; 
+window.pendingItems = []; // Array to hold all report items, including the (now resized) file objects
 window.techPad = null;
 window.opManPad = null;
 
@@ -14,7 +12,7 @@ const pendingItemsList = document.getElementById('pendingItemsList');
 
 
 // ---------------------------------------------------------------
-// 1. Initialization and Data Loading
+// 1. Initialization, Data Loading, and Utility Functions
 // ---------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -45,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPendingItems(); 
     
     // 4. Attach event listeners
+    // Note: addItem is now async, but the listener just calls the function.
     document.getElementById('addItemButton').addEventListener('click', addItem);
     
     // Live update of names on signature canvas
@@ -64,7 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Helper function to show a custom modal notification
 window.showNotification = function(type, title, body) {
-    // Check for the existence of all critical elements before using them.
     const modalElement = document.getElementById('customAlertModal');
     const titleElement = document.getElementById('customAlertTitle');
     const bodyElement = document.getElementById('customAlertBody');
@@ -72,7 +70,6 @@ window.showNotification = function(type, title, body) {
 
     if (!modalElement || typeof bootstrap === 'undefined' || !titleElement || !bodyElement || !iconElement) { 
         console.error("Modal elements or Bootstrap JS not found. Displaying standard alert.");
-        // Fallback to standard alert
         alert(`${title}: ${body}`); 
         return;
     }
@@ -98,25 +95,96 @@ window.showNotification = function(type, title, body) {
     }
 
     titleElement.textContent = title;
-    bodyElement.innerHTML = body; // Use innerHTML to support markdown formatting like **bold**
+    bodyElement.innerHTML = body;
     
-    // Ensure dialogElement is not null before setting its className
     if (dialogElement) {
         dialogElement.className = `modal-content border-start border-5 ${colorClass}`;
     }
     
     iconElement.className = `fas fa-2x me-3 ${iconClass}`;
 
-    // Show the modal using Bootstrap's JS API
     const modal = new bootstrap.Modal(modalElement);
     modal.show();
 
-    // Optionally auto-hide after 5 seconds for success/info messages
     if (type !== 'error') {
         setTimeout(() => {
             modal.hide();
         }, 5000);
     }
+}
+
+// --- NEW HELPER: Image Resizing and Compression Function ---
+// This function reduces the image dimensions and uses JPEG compression
+function resizeImage(file, maxWidth, maxHeight, quality) {
+    return new Promise((resolve) => {
+        if (!file || !file.type.startsWith('image/')) {
+            console.warn(`File ${file.name} is not a valid image. Skipping resize.`);
+            resolve(file); 
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                let width = img.width;
+                let height = img.height;
+
+                // If image is already small, skip canvas resizing
+                if (width <= maxWidth && height <= maxHeight) {
+                    resolve(file);
+                    return;
+                }
+
+                // Calculate new dimensions to fit within maxWidth/maxHeight
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width *= maxHeight / height;
+                        height = maxHeight;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Convert canvas content to a compressed image Blob
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        console.error("Failed to create Blob from canvas.");
+                        resolve(file); 
+                        return;
+                    }
+
+                    // Create a new File object from the compressed Blob
+                    const resizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+                        type: 'image/jpeg', 
+                        lastModified: Date.now()
+                    });
+                    
+                    console.log(`Resized ${file.name} from ${file.size} bytes to ${resizedFile.size} bytes.`);
+                    resolve(resizedFile);
+                }, 'image/jpeg', quality); // Use JPEG compression (e.g., 0.8)
+            };
+            img.onerror = function() {
+                console.error(`Error loading image for resize: ${file.name}`);
+                resolve(file); 
+            };
+            reader.readAsDataURL(file);
+        };
+        reader.onerror = function() {
+            console.error(`Error reading file: ${file.name}`);
+            resolve(file); 
+        };
+    });
 }
 
 
@@ -127,10 +195,8 @@ window.showNotification = function(type, title, body) {
 function initDropdowns() {
     const assetSelect = document.getElementById('assetSelect');
     
-    // Clear existing options, but keep a blank option for validation
     assetSelect.innerHTML = '<option value="" selected disabled>Select Asset</option>';
     
-    // Populate Asset dropdown using the global window.dropdownData
     Object.keys(window.dropdownData).forEach(asset => {
         const option = document.createElement('option');
         option.value = asset;
@@ -145,19 +211,15 @@ function setupCascadingDropdowns() {
     const descriptionSelect = document.getElementById('descriptionSelect');
 
     assetSelect.addEventListener('change', () => {
-        // Clear and reset dependent dropdowns
         systemSelect.innerHTML = '<option value="" selected disabled>Select System</option>';
         descriptionSelect.innerHTML = '<option value="" selected disabled>Select Description</option>';
         systemSelect.disabled = true;
         descriptionSelect.disabled = true;
 
-        // Clear invalid status when a change is made
         assetSelect.classList.remove('is-invalid'); 
 
         const selectedAsset = assetSelect.value;
-        // Use window.dropdownData
         if (selectedAsset && window.dropdownData[selectedAsset]) {
-            // Populate System dropdown
             Object.keys(window.dropdownData[selectedAsset]).forEach(system => {
                 const option = document.createElement('option');
                 option.value = system;
@@ -169,19 +231,15 @@ function setupCascadingDropdowns() {
     });
 
     systemSelect.addEventListener('change', () => {
-        // Clear and reset Description dropdown
         descriptionSelect.innerHTML = '<option value="" selected disabled>Select Description</option>';
         descriptionSelect.disabled = true;
         
-        // Clear invalid status when a change is made
         systemSelect.classList.remove('is-invalid');
 
         const selectedAsset = assetSelect.value;
         const selectedSystem = systemSelect.value;
         
-        // Use window.dropdownData
         if (selectedAsset && selectedSystem && window.dropdownData[selectedAsset] && window.dropdownData[selectedAsset][selectedSystem]) {
-            // Populate Description dropdown
             window.dropdownData[selectedAsset][selectedSystem].forEach(description => {
                 const option = document.createElement('option');
                 option.value = description;
@@ -193,7 +251,6 @@ function setupCascadingDropdowns() {
     });
 
     descriptionSelect.addEventListener('change', () => {
-        // Clear invalid status when a change is made
         descriptionSelect.classList.remove('is-invalid');
     });
 }
@@ -203,7 +260,7 @@ function setupCascadingDropdowns() {
 // ---------------------------------------------------------------
 
 function renderPendingItems() {
-    if (!pendingItemsList) return; // Add check for pendingItemsList existence
+    if (!pendingItemsList) return;
     
     pendingItemsList.innerHTML = '';
     
@@ -215,7 +272,6 @@ function renderPendingItems() {
     window.pendingItems.forEach((item, index) => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'report-item';
-        // Note: item.photos is now an Array of File objects, so we get the length.
         itemDiv.innerHTML = `
             <div class="item-details">
                 <strong>Item ${index + 1}:</strong> ${item.asset} / ${item.system} / ${item.description}
@@ -249,10 +305,10 @@ window.removeItem = function(index) {
 }
 
 // ---------------------------------------------------------------
-// 5. New Item Addition Logic - CRITICALLY REVISED 
+// 5. New Item Addition Logic - CRITICALLY REVISED FOR ASYNC RESIZING
 // ---------------------------------------------------------------
 
-window.addItem = function() {
+window.addItem = async function() { // <--- MODIFIED TO ASYNC
     const assetSelect = document.getElementById('assetSelect');
     const systemSelect = document.getElementById('systemSelect');
     const descriptionSelect = document.getElementById('descriptionSelect');
@@ -262,16 +318,12 @@ window.addItem = function() {
     const commentsTextarea = document.getElementById('commentsTextarea');
     
     const addItemButton = document.getElementById('addItemButton');
-    // Disable button to prevent double-click
-    if (addItemButton) addItemButton.disabled = true; 
 
-    // --- Input Validation: Manually check validity on required dropdowns ---
-    
+    // --- Input Validation ---
     let isValid = true;
     const requiredSelects = [assetSelect, systemSelect, descriptionSelect];
 
     requiredSelects.forEach(select => {
-        // Use checkValidity() to leverage the HTML 'required' attribute validation messages/state
         if (!select.checkValidity()) {
             select.classList.add('is-invalid');
             isValid = false;
@@ -282,25 +334,38 @@ window.addItem = function() {
     
     if (!isValid) {
         showNotification('error', 'Validation Error', 'Please select **Asset**, **System**, and **Description** before adding an item.');
-        if (addItemButton) addItemButton.disabled = false;
-        return;
+        return; // Do not disable the button here, as we didn't start processing
     }
     
-    // -------------------------------------------------------------------------
-
-    // CRITICAL CHANGE: Instead of converting to Base64, store the raw File objects.
-    const photos = Array.from(photoInput.files);
-
+    // Disable button and show processing status
+    if (addItemButton) {
+        addItemButton.disabled = true; 
+        addItemButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing Photos...'; 
+    }
+    
+    // --- CRITICAL STEP: Resize all photos using Promises ---
+    const rawFiles = Array.from(photoInput.files);
+    
+    // Target 1200px max dimension, 80% JPEG quality
+    const resizePromises = rawFiles.map(file => 
+        resizeImage(file, 1200, 1200, 0.8) 
+    );
+    
+    let resizedPhotos = [];
+    
     try {
+        // Wait for ALL promises to resolve (photos to be resized/compressed)
+        resizedPhotos = await Promise.all(resizePromises); 
+
         // 1. Create the new item object
         const newItem = {
             asset: assetSelect.value,
             system: systemSelect.value,
             description: descriptionSelect.value,
-            quantity: parseInt(quantityInput.value) || 1, // Default to 1 if not a valid number
+            quantity: parseInt(quantityInput.value) || 1, 
             brand: brandInput.value.trim(),
             comments: commentsTextarea.value.trim(),
-            photos: photos // CRITICAL: 'photos' is now an array of RAW File objects
+            photos: resizedPhotos // Store the new, smaller File objects
         };
 
         // 2. Add to the pending list
@@ -308,7 +373,7 @@ window.addItem = function() {
 
         // 3. Update the UI
         renderPendingItems();
-        showNotification('success', 'Item Added', `Successfully added 1 item: ${newItem.asset} / ${newItem.system} / ${newItem.description} with ${photos.length} photo(s).`); 
+        showNotification('success', 'Item Added', `Successfully added 1 item: ${newItem.asset} / ${newItem.system} / ${newItem.description} with ${resizedPhotos.length} photo(s).`); 
 
         // 4. Reset the "Add Item" form fields (keep Asset selection)
         systemSelect.value = '';
@@ -321,9 +386,12 @@ window.addItem = function() {
         photoInput.value = ''; // Clear file input
         
     } catch (e) {
-        showNotification('error', 'Item Processing Error', `Failed to process item details. Details: ${e.message}`);
+        showNotification('error', 'Item Processing Error', `Failed to process/resize photos. Details: ${e.message}`);
     } finally {
-        if (addItemButton) addItemButton.disabled = false; // Re-enable button
+        if (addItemButton) {
+            addItemButton.disabled = false; // Re-enable button
+            addItemButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add Item'; // Restore button text
+        }
     }
 }
 
@@ -332,25 +400,22 @@ window.addItem = function() {
 // 6. Form Submission Logic - CRITICALLY REVISED 
 // ---------------------------------------------------------------
 
-// Helper function to trigger a programmatic download (New)
+// Helper function to trigger a programmatic download
 const triggerDownload = (url) => {
     const a = document.createElement('a');
     a.href = url;
-    a.download = ''; // This tells the browser to download the file
+    a.download = ''; 
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 };
 
 window.onSubmit = async function(event) {
-    event.preventDefault(); // Stop default form submission
+    event.preventDefault(); 
 
     const submitButton = document.getElementById('nextButton'); 
-
-    // Find the technician name input to preserve its value later
     const technicianNameInput = document.getElementById('technician_name');
-
-    // Disable button during submission
+    
     if (submitButton) {
         submitButton.disabled = true; 
     }
@@ -358,22 +423,19 @@ window.onSubmit = async function(event) {
     const alertDiv = document.getElementById('submission-alert');
     const statusText = document.getElementById('status'); 
 
-    // Reset status display 
     if (alertDiv) alertDiv.className = 'alert d-none';
     if (alertDiv) alertDiv.textContent = '';
     if (statusText) statusText.textContent = 'Submitting...';
 
     // --- 1. Collect Form Data (Non-file fields) ---
-    const formData = new FormData(form); // Use standard FormData for non-file inputs
+    const formData = new FormData(form); 
     const visitInfo = {};
     formData.forEach((value, key) => {
-        // Exclude signatures (handled below) and actual files (only the primary form is collected here)
         if (key !== 'tech_signature' && key !== 'opMan_signature' && form.elements[key].type !== 'file') { 
             visitInfo[key] = value;
         }
     });
 
-    // Store the technician name before resetting the form
     const technicianNameBeforeReset = technicianNameInput ? technicianNameInput.value : '';
 
     // --- 2. Collect Signatures (Still Base64 for small data) ---
@@ -381,10 +443,11 @@ window.onSubmit = async function(event) {
     const opManSignatureData = window.opManPad ? window.opManPad.toDataURL() : '';
     
     // --- 3. Create JSON Data Structure (without the actual file objects) ---
-    // The report_items must have their 'photos' field stripped down to a simple array 
-    // of keys/indices, or simply removed, since the files are sent separately.
+    // The report_items must have their 'photos' field excluded from the JSON.
     const cleanItems = window.pendingItems.map(item => {
-        const { photos, ...itemDetails } = item; // Destructure to exclude the large File array
+        const { photos, ...itemDetails } = item; 
+        // Add photo count to the JSON data for the server to know what to expect
+        itemDetails.photo_count = item.photos.length; 
         return itemDetails;
     });
 
@@ -397,7 +460,7 @@ window.onSubmit = async function(event) {
         }
     };
     
-    // --- 4. Validation for Submission (same as before) ---
+    // --- 4. Validation for Submission ---
     const technicianName = payloadData.visit_info.technician_name;
     const techSignatureLength = techSignatureData.length;
 
@@ -420,38 +483,33 @@ window.onSubmit = async function(event) {
     }
 
     // --- 5. CRITICAL: Assemble Final FormData for Submission ---
-    // Create a NEW FormData object for the final submission.
     const finalFormData = new FormData();
     
     // 5a. Append the main data payload as a JSON string under the key 'data'
-    // This matches the Python backend's expected `request.form['data']`
     finalFormData.append('data', JSON.stringify(payloadData)); 
     
     // 5b. Append the actual File objects (photos)
-    // The key format must match what the Python backend expects: 'photo-item-{itemIndex}-{photoIndex}'
+    // The key format is used by the server to map photos back to the report item
     window.pendingItems.forEach((item, itemIndex) => {
         item.photos.forEach((file, photoIndex) => {
             const key = `photo-item-${itemIndex}-${photoIndex}`;
-            // Append the actual File object
+            // Append the actual File object (which is now the smaller, compressed file)
             finalFormData.append(key, file, file.name); 
         });
     });
+    
+    if (statusText) statusText.textContent = 'Uploading data and photos...';
 
     // --- 6. AJAX Submission with FormData ---
     try {
         const response = await fetch('/site-visit/submit', {
             method: 'POST',
-            // CRITICAL: DO NOT set the 'Content-Type' header here. 
-            // The browser will automatically set it to 'multipart/form-data' 
-            // and include the correct boundary string, which is required for file uploads.
             body: finalFormData 
         });
 
-        // The rest of the logic (response parsing, success/error handling, cleanup) remains the same
         const result = await response.json();
 
         if (response.ok) {
-            
             // Success State
             triggerDownload(result.pdf_url);
             triggerDownload(result.excel_url);
