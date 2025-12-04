@@ -266,8 +266,8 @@
 
 
     <script>
-        // FIX: Define the correct submission URL using the Flask Blueprint endpoint
-        const SUBMIT_URL = "{{ url_for('site_visit_bp.submit') }}";
+        // FIX APPLIED HERE: Changed 'site_visit_bp.submit' to 'site_visit_bp.submit_metadata'
+        const SUBMIT_URL = "{{ url_for('site_visit_bp.submit_metadata') }}";
         
         // --- Tab Navigation and Submission Logic ---
         document.addEventListener('DOMContentLoaded', () => {
