@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const techCanvas = document.getElementById('techSignaturePad');
     const opManCanvas = document.getElementById('opManSignaturePad');
     
-    // Check if SignaturePad library is available before initializing
     if (typeof SignaturePad !== 'undefined') {
         if (techCanvas) {
             window.techPad = new SignaturePad(techCanvas, {
@@ -43,7 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPendingItems(); 
     
     // 4. Attach event listeners
-    // Note: addItem is now async, but the listener just calls the function.
     document.getElementById('addItemButton').addEventListener('click', addItem);
     
     // Live update of names on signature canvas
@@ -117,6 +115,7 @@ window.showNotification = function(type, title, body) {
 // This function reduces the image dimensions and uses JPEG compression
 function resizeImage(file, maxWidth, maxHeight, quality) {
     return new Promise((resolve) => {
+        // Skip non-image files gracefully
         if (!file || !file.type.startsWith('image/')) {
             console.warn(`File ${file.name} is not a valid image. Skipping resize.`);
             resolve(file); 
@@ -154,6 +153,7 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
                 canvas.height = height;
 
                 const ctx = canvas.getContext('2d');
+                // Use better quality resampling if needed, but simple drawImage is usually sufficient
                 ctx.drawImage(img, 0, 0, width, height);
 
                 // Convert canvas content to a compressed image Blob
@@ -165,6 +165,7 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
                     }
 
                     // Create a new File object from the compressed Blob
+                    // Change file extension to .jpg since we force JPEG compression
                     const resizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
                         type: 'image/jpeg', 
                         lastModified: Date.now()
@@ -178,7 +179,7 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
                 console.error(`Error loading image for resize: ${file.name}`);
                 resolve(file); 
             };
-            reader.readAsDataURL(file);
+            reader.readAsDataURL(file); // Load the file as a data URL for the Image object
         };
         reader.onerror = function() {
             console.error(`Error reading file: ${file.name}`);
@@ -334,7 +335,7 @@ window.addItem = async function() { // <--- MODIFIED TO ASYNC
     
     if (!isValid) {
         showNotification('error', 'Validation Error', 'Please select **Asset**, **System**, and **Description** before adding an item.');
-        return; // Do not disable the button here, as we didn't start processing
+        return; 
     }
     
     // Disable button and show processing status
@@ -443,10 +444,8 @@ window.onSubmit = async function(event) {
     const opManSignatureData = window.opManPad ? window.opManPad.toDataURL() : '';
     
     // --- 3. Create JSON Data Structure (without the actual file objects) ---
-    // The report_items must have their 'photos' field excluded from the JSON.
     const cleanItems = window.pendingItems.map(item => {
         const { photos, ...itemDetails } = item; 
-        // Add photo count to the JSON data for the server to know what to expect
         itemDetails.photo_count = item.photos.length; 
         return itemDetails;
     });
@@ -489,11 +488,9 @@ window.onSubmit = async function(event) {
     finalFormData.append('data', JSON.stringify(payloadData)); 
     
     // 5b. Append the actual File objects (photos)
-    // The key format is used by the server to map photos back to the report item
     window.pendingItems.forEach((item, itemIndex) => {
         item.photos.forEach((file, photoIndex) => {
             const key = `photo-item-${itemIndex}-${photoIndex}`;
-            // Append the actual File object (which is now the smaller, compressed file)
             finalFormData.append(key, file, file.name); 
         });
     });

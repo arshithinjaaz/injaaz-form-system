@@ -50,7 +50,7 @@ def get_sig_image_from_path(file_path, name):
     """Loads signature from a file path into a ReportLab Image object using an in-memory stream."""
     if file_path and os.path.exists(file_path):
         try:
-            # 💡 FIX: Eagerly read the file contents into memory (BytesIO)
+            # FIX: Eagerly read the file contents into memory (BytesIO)
             with open(file_path, 'rb') as f:
                 img_data = io.BytesIO(f.read())
                 
@@ -62,7 +62,7 @@ def get_sig_image_from_path(file_path, name):
         except Exception as e:
             logger.error(f"Failed to load signature image for {name} from {file_path}: {e}")
             return Paragraph(f'Image Load Failed: {name}', styles['Normal'])
-        
+            
     return Paragraph(f'Unsigned: {name}', styles['Normal']) 
 
 def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
@@ -70,7 +70,7 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
     if not file_path or not os.path.exists(file_path):
         return Paragraph(f'<font size="8">{placeholder_text}</font>', styles['SmallText'])
     try:
-        # 💡 FIX: Eagerly read the file contents into memory (BytesIO)
+        # FIX: Eagerly read the file contents into memory (BytesIO)
         with open(file_path, 'rb') as f:
             img_data = io.BytesIO(f.read())
 
@@ -107,9 +107,9 @@ def create_signature_table(visit_info):
     signature_data = [
         [tech_sig, opMan_sig],
         [Paragraph('<font size="10">_________________________</font>', styles['Normal']), 
-          Paragraph('<font size="10">_________________________</font>', styles['Normal'])],
+         Paragraph('<font size="10">_________________________</font>', styles['Normal'])],
         [Paragraph(f"<font size='10'><b>Technician:</b> {tech_name}</font>", styles['Normal']), 
-          Paragraph(f"<font size='10'><b>Operation Manager:</b> {opMan_name}</font>", styles['Normal'])]
+         Paragraph(f"<font size='10'><b>Operation Manager:</b> {opMan_name}</font>", styles['Normal'])]
     ]
     
     # Matching the column width from your template
@@ -189,7 +189,7 @@ def build_report_story(visit_info, processed_items):
     logo = Paragraph('', styles['Normal'])
     try:
         if os.path.exists(LOGO_PATH):
-            # 💡 FIX: Eagerly load logo into memory stream
+            # FIX: Eagerly load logo into memory stream
             with open(LOGO_PATH, 'rb') as f:
                 logo_data = io.BytesIO(f.read())
 
