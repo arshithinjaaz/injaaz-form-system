@@ -11,7 +11,7 @@ from flask import Blueprint, render_template, jsonify, request, url_for, send_fr
 # =================================================================
 
 # IMPORTANT: The following functions MUST be defined in a sibling file named 's3_utils.py'
-from .s3_utils import (
+from .utils import (
     generate_presigned_put_url,
     decode_base64_to_s3
 )
