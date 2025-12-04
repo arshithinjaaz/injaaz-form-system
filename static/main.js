@@ -1,11 +1,11 @@
-// main.js (FULL AND OPTIMIZED for Faster Photo Processing)
+// main.js (FULL AND CORRECTED)
 
 // Declare global variables attached to the window object for universal access
 window.dropdownData = DROPDOWN_DATA; 
 window.pendingItems = []; // Array to hold all report items, including the (now resized) file objects
 window.techPad = null;
 window.opManPad = null;
-const MAX_PHOTOS = 10; // New limit for photos per item
+const MAX_PHOTOS = 10; // Limit for photos per item
 
 // Retrieve the main form and pending list container
 const form = document.getElementById('visitForm');
@@ -112,7 +112,7 @@ window.showNotification = function(type, title, body) {
     }
 }
 
-// --- Image Resizing and Compression Function ---
+// --- Image Resizing and Compression Function (Core Logic) ---
 function resizeImage(file, maxWidth, maxHeight, quality) {
     return new Promise((resolve) => {
         // Skip non-image files gracefully
@@ -296,7 +296,7 @@ window.removeItem = function(index) {
 }
 
 // ---------------------------------------------------------------
-// 4. New Item Addition Logic - WITH AGGRESSIVE OPTIMIZATION
+// 4. New Item Addition Logic - REVERTED TO ORIGINAL QUALITY
 // ---------------------------------------------------------------
 
 window.addItem = async function() { 
@@ -329,7 +329,7 @@ window.addItem = async function() {
         return; 
     }
     
-    // --- NEW VALIDATION: Photo Limit Check ---
+    // --- Photo Limit Check ---
     if (rawFiles.length > MAX_PHOTOS) {
         showNotification('warning', 'Photo Limit Exceeded', `Please upload a maximum of ${MAX_PHOTOS} photos per item. You selected ${rawFiles.length}.`);
         return; // Exit before starting processing
@@ -344,9 +344,10 @@ window.addItem = async function() {
     // --- CRITICAL STEP: Resize all photos using Promises ---
     let processedCount = 0;
     
-    // 🔥 OPTIMIZED SETTINGS: Max 600px wide/tall, 40% JPEG quality 🔥
+    // 🔙 REVERTED SETTINGS: Max 800px wide/tall, 60% JPEG quality
     const resizePromises = rawFiles.map(file => {
-        return resizeImage(file, 600, 600, 0.4).then(resizedFile => {
+        // Target: Max 800px wide/tall, 60% JPEG quality
+        return resizeImage(file, 800, 800, 0.6).then(resizedFile => {
             processedCount++;
             // Update the status text after each photo
             if (addItemButton) {
@@ -420,6 +421,7 @@ window.onSubmit = async function(event) {
 
     const submitButton = document.getElementById('nextButton'); 
     const technicianNameInput = document.getElementById('technician_name');
+    const opManNameInput = document.getElementById('opMan_name'); // Get OpMan input for name reset UX
     
     if (submitButton) {
         submitButton.disabled = true; 
@@ -442,6 +444,7 @@ window.onSubmit = async function(event) {
     });
 
     const technicianNameBeforeReset = technicianNameInput ? technicianNameInput.value : '';
+    const opManNameBeforeReset = opManNameInput ? opManNameInput.value : ''; // Preserve OpMan name
 
     // --- 2. Collect Signatures (Still Base64 for small data) ---
     const techSignatureData = window.techPad ? window.techPad.toDataURL() : '';
@@ -527,7 +530,8 @@ window.onSubmit = async function(event) {
             window.pendingItems = [];
             renderPendingItems();
             if (window.techPad) window.techPad.clear();
-            if (window.opManPad) window.opManPad.clear(); // Corrected the pad variable name
+            // 🐛 FIX 1: Corrected typo (was window.opPad)
+            if (window.opManPad) window.opManPad.clear(); 
             
             // Reset the form fields
             if (form) form.reset();
@@ -536,6 +540,10 @@ window.onSubmit = async function(event) {
             if (technicianNameInput) {
                 technicianNameInput.value = technicianNameBeforeReset;
                 technicianNameInput.dispatchEvent(new Event('input'));
+                
+                // ✨ FIX 2: Update the signature name displays after form reset
+                document.getElementById("techNameDisplay").innerText = technicianNameBeforeReset || "Technician Name";
+                document.getElementById("opManNameDisplay").innerText = opManNameBeforeReset || "Operation Manager Name";
             }
 
             // Re-initialize dropdowns
