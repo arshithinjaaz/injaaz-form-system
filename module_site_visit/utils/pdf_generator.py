@@ -61,7 +61,7 @@ def resize_image_to_bytes(file_path, max_dimension=800):
         # Calculate ratio to maintain aspect ratio and fit within max_dimension
         ratio = min(max_dimension / img_width, max_dimension / img_height)
 
-        # Use the correct constant for resampling
+        # Use the correct constant for resampling (Handles deprecation warning in modern PIL versions)
         resample_filter = PilImage.Resampling.LANCZOS if hasattr(PilImage, 'Resampling') else PilImage.LANCZOS
 
         if ratio < 1: # Only resize if it's currently too big
@@ -498,3 +498,120 @@ def generate_visit_pdf(visit_info, processed_items, output_dir, logo_path):
         logger.error(f"FATAL PDF GENERATION ERROR: {e}")
         # Re-raise to be caught by the main route handler
         raise
+
+# --------------------------------------------------------------------------------------
+# --- EXECUTION BLOCK FOR TESTING ---
+# --------------------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    
+    # 1. Configuration and Paths
+    OUTPUT_DIRECTORY = os.path.join(os.getcwd(), "generated_reports") 
+    os.makedirs(OUTPUT_DIRECTORY, exist_ok=True) 
+    
+    IMAGE_DIR = os.path.join(os.getcwd(), "test_images")
+    os.makedirs(IMAGE_DIR, exist_ok=True) 
+    
+    # --- Mock Image Creation (Ensuring it runs locally) ---
+    def create_mock_image(filepath, size, color):
+        if not os.path.exists(filepath):
+            try:
+                img = PilImage.new('RGB', size, color=color)
+                d = ImageDraw.Draw(img)
+                d.text((10, 10), os.path.basename(filepath), fill=(0,0,0))
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                img.save(filepath)
+            except Exception as e:
+                logger.error(f"Could not create mock image at {filepath}: {e}")
+                
+    LOGO_PATH_MOCK = os.path.join(IMAGE_DIR, "logo.png")
+    SIG_TECH_PATH_MOCK = os.path.join(IMAGE_DIR, "signature_tech.png")
+    SIG_OPMAN_PATH_MOCK = os.path.join(IMAGE_DIR, "signature_opman.png")
+    PHOTO_A_1_MOCK = os.path.join(IMAGE_DIR, "photo_a_1.jpg")
+    PHOTO_A_2_MOCK = os.path.join(IMAGE_DIR, "photo_a_2.jpg")
+    PHOTO_A_3_MOCK = os.path.join(IMAGE_DIR, "photo_a_3.jpg")
+    PHOTO_B_1_MOCK = os.path.join(IMAGE_DIR, "photo_b_1.jpg")
+
+    # Create the mock images
+    create_mock_image(LOGO_PATH_MOCK, (300, 200), 'green')
+    create_mock_image(SIG_TECH_PATH_MOCK, (400, 150), 'lightgray')
+    create_mock_image(SIG_OPMAN_PATH_MOCK, (400, 150), 'lightgray')
+    create_mock_image(PHOTO_A_1_MOCK, (1000, 800), 'lightblue') 
+    create_mock_image(PHOTO_A_2_MOCK, (400, 300), 'lightcoral')
+    create_mock_image(PHOTO_A_3_MOCK, (400, 300), 'lightyellow')
+    create_mock_image(PHOTO_B_1_MOCK, (800, 600), 'lightgreen')
+
+
+    # 2. Example Data Structures (Using mock paths)
+    VISIT_INFO_DATA = {
+        'building_name': 'Al-Subaygha Cafeteria',
+        'building_address': 'Masfout Park, Ajman',
+        'technician_name': 'Saleh Al Marzooqi',
+        'opMan_name': 'Omar Abdullah',
+        'contact_person': 'Fahad Al Ali',
+        'contact_number': '+971 50 XXX XXXX',
+        'email': 'client@injaaz.ae',
+        'tech_signature_path': SIG_TECH_PATH_MOCK, 
+        'opMan_signature_path': SIG_OPMAN_PATH_MOCK, 
+    }
+
+    PROCESSED_ITEMS_DATA = [
+        {
+            'asset': 'Exterior Wall',
+            'system': 'Finishes',
+            'description': 'Repairs and Shield Top Coat painting works required.',
+            'quantity': '114',
+            'brand': 'National Paints',
+            'comments': 'Cracks observed near window frame.',
+            'image_paths': [
+                PHOTO_A_1_MOCK, 
+                PHOTO_A_2_MOCK,
+                PHOTO_A_3_MOCK, 
+            ]
+        },
+        {
+            'asset': 'Sanitary Fixtures',
+            'system': 'Plumbing',
+            'description': 'Supply and installation of RAK water mixer and angle valves.',
+            'quantity': '2 sets',
+            'brand': 'RAK Ceramics',
+            'comments': 'Leakage reported at the previous mixer.',
+            'image_paths': [
+                PHOTO_B_1_MOCK,
+            ]
+        },
+        {
+            'asset': 'Electrical Fan',
+            'system': 'HVAC/Ventilation',
+            'description': 'Supply and fix 6" EXHAUST FAN (AS).',
+            'quantity': '1',
+            'brand': 'XPLARE',
+            'comments': 'Old unit is seized. Replacement required.',
+            'image_paths': [] 
+        }
+    ]
+
+    # 3. Execution
+    logger.info("Starting PDF generation...")
+    try:
+        pdf_path, pdf_filename = generate_visit_pdf(
+            VISIT_INFO_DATA, 
+            PROCESSED_ITEMS_DATA, 
+            OUTPUT_DIRECTORY, 
+            LOGO_PATH_MOCK
+        )
+        logger.info(f"SUCCESS: PDF created at: {pdf_path}")
+        print(f"\n--- PDF successfully generated ---")
+        print(f"File: {pdf_filename}")
+        print(f"Path: {pdf_path}")
+        print(f"----------------------------------")
+
+    except Exception as e:
+        logger.error(f"Execution failed. Check the error above and ensure all image paths are correct: {e}")
+        
+    finally:
+        # Cleanup mock files after execution
+        if os.path.exists(IMAGE_DIR):
+             # You might want to remove this for production use, but keep for testing
+             # shutil.rmtree(IMAGE_DIR) 
+             pass
