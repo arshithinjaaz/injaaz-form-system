@@ -1,4 +1,4 @@
-// main.js (FULL AND CORRECTED)
+// main.js (FULL CODE OPTIMIZED FOR SUBMISSION SPEED)
 
 // Declare global variables attached to the window object for universal access
 window.dropdownData = DROPDOWN_DATA; 
@@ -296,7 +296,7 @@ window.removeItem = function(index) {
 }
 
 // ---------------------------------------------------------------
-// 4. New Item Addition Logic - REVERTED TO ORIGINAL QUALITY
+// 4. New Item Addition Logic - OPTIMIZED FOR SUBMISSION SPEED
 // ---------------------------------------------------------------
 
 window.addItem = async function() { 
@@ -344,10 +344,10 @@ window.addItem = async function() {
     // --- CRITICAL STEP: Resize all photos using Promises ---
     let processedCount = 0;
     
-    // 🔙 REVERTED SETTINGS: Max 800px wide/tall, 60% JPEG quality
+    // 🔥🔥 RE-APPLYING SPEED OPTIMIZATION: Max 600px wide/tall, 40% JPEG quality 🔥🔥
     const resizePromises = rawFiles.map(file => {
-        // Target: Max 800px wide/tall, 60% JPEG quality
-        return resizeImage(file, 800, 800, 0.6).then(resizedFile => {
+        // Target: Max 600px wide/tall, 40% JPEG quality
+        return resizeImage(file, 600, 600, 0.4).then(resizedFile => {
             processedCount++;
             // Update the status text after each photo
             if (addItemButton) {
@@ -530,7 +530,7 @@ window.onSubmit = async function(event) {
             window.pendingItems = [];
             renderPendingItems();
             if (window.techPad) window.techPad.clear();
-            // 🐛 FIX 1: Corrected typo (was window.opPad)
+            // 🐛 FIX: Corrected typo (was window.opPad)
             if (window.opManPad) window.opManPad.clear(); 
             
             // Reset the form fields
@@ -541,7 +541,7 @@ window.onSubmit = async function(event) {
                 technicianNameInput.value = technicianNameBeforeReset;
                 technicianNameInput.dispatchEvent(new Event('input'));
                 
-                // ✨ FIX 2: Update the signature name displays after form reset
+                // ✨ FIX: Update the signature name displays after form reset
                 document.getElementById("techNameDisplay").innerText = technicianNameBeforeReset || "Technician Name";
                 document.getElementById("opManNameDisplay").innerText = opManNameBeforeReset || "Operation Manager Name";
             }
@@ -574,4 +574,4 @@ window.onSubmit = async function(event) {
             submitButton.disabled = false;
         }
     }
-}
+}``
