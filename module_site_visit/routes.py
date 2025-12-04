@@ -6,27 +6,28 @@ import tempfile
 from datetime import datetime
 from flask import Blueprint, render_template, jsonify, request, url_for, send_from_directory
 
-# --- 1. NEW IMPORTS for S3 Utilities and Redis Placeholder ---
-# These functions MUST now exist in the s3_utils.py file you created.
+# =================================================================
+# --- 1. CORE IMPORTS ---
+# =================================================================
+
+# IMPORTANT: The following functions MUST be defined in a sibling file named 's3_utils.py'
 from .s3_utils import (
     generate_presigned_put_url,
     decode_base64_to_s3
 )
 
-# Placeholder: Import your utility functions
+# IMPORTANT: The following utility functions MUST be defined in 'utils/'
 from .utils.email_sender import send_outlook_email 
 from .utils.excel_writer import create_report_workbook 
 from .utils.pdf_generator import generate_visit_pdf 
 
 # =================================================================
 # --- 🔴 STABILITY FIX: REDIS/DB PLACEHOLDER ---
+# This simulates using a key/value store (like Redis) for temporary 
+# state between API calls (e.g., while photos are uploaded to S3).
+# It uses the temporary file system (os.path.join(tempfile.gettempdir())) 
+# which is NOT production safe, but works for the current placeholder logic.
 # =================================================================
-# WARNING: This is a placeholder. In a real app, you would import a 
-# working Redis client here (e.g., from your config file).
-# Example: from .config import redis_client
-
-# We will keep the temporary file logic for now, but enclose it in a 
-# clear function to show where the Redis/DB replacement MUST go.
 
 def save_report_state(report_id, data):
     """Saves report state (Placeholder for Redis/DB)."""
@@ -53,7 +54,7 @@ def get_report_state(report_id):
             os.remove(temp_record_path)
             
 # =================================================================
-# --- PATH CONFIGURATION (Unchanged) ---
+# --- PATH AND BLUEPRINT CONFIGURATION ---
 # =================================================================
 
 BLUEPRINT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -62,6 +63,7 @@ BASE_DIR = os.path.dirname(BLUEPRINT_DIR)
 TEMPLATE_ABSOLUTE_PATH = os.path.join(BLUEPRINT_DIR, 'templates')
 DROPDOWN_DATA_PATH = os.path.join(BLUEPRINT_DIR, 'dropdown_data.json') 
 
+# Define the directory where generated files will be stored
 GENERATED_DIR_NAME = "generated"
 GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
 
@@ -74,7 +76,7 @@ site_visit_bp = Blueprint(
 )
 
 # =================================================================
-# 1. Route: Main Form Page (UNCHANGED)
+# 1. Route: Main Form Page
 # =================================================================
 @site_visit_bp.route('/form') 
 def index():
@@ -83,7 +85,7 @@ def index():
 
 
 # =================================================================
-# 2. Route: Dropdown Data Endpoint (UNCHANGED)
+# 2. Route: Dropdown Data Endpoint
 # =================================================================
 @site_visit_bp.route('/dropdowns')
 def get_dropdown_data():
@@ -102,7 +104,7 @@ def get_dropdown_data():
 
 # =================================================================
 # 3. ROUTE: PHASE 1 - SUBMIT METADATA & GET S3 LINKS
-# --- Now using imported S3 helpers and state functions ---
+# Receives form metadata, processes signatures, saves state, and returns S3 links.
 # =================================================================
 @site_visit_bp.route('/api/submit/metadata', methods=['POST'])
 def submit_metadata():
@@ -114,7 +116,8 @@ def submit_metadata():
         processed_items = data.get('report_items', []) 
         signatures = data.get('signatures', {})
         
-        # --- 3A. Process Signatures (Now imported from s3_utils) ---
+        # --- 3A. Process Signatures (Using s3_utils.decode_base64_to_s3) ---
+        # This function should convert the base64 string to a file and upload it to S3, returning the key.
         tech_sig_key = decode_base64_to_s3(signatures.get('tech_signature'), 'tech_sig')
         opMan_sig_key = decode_base64_to_s3(signatures.get('opMan_signature'), 'opman_sig')
         
@@ -122,13 +125,14 @@ def submit_metadata():
         visit_info['tech_signature_key'] = tech_sig_key
         visit_info['opMan_signature_key'] = opMan_sig_key
         
-        # --- 3B. Generate S3 Pre-Signed URLs for Photos (Now imported from s3_utils) ---
+        # --- 3B. Generate S3 Pre-Signed URLs for Photos (Using s3_utils.generate_presigned_put_url) ---
         signed_urls = []
         report_id = f"report-{int(time.time())}" 
         
         for item_index, item in enumerate(processed_items):
             for photo_index in range(item.get('photo_count', 0)):
                 file_extension = '.jpg' 
+                # This function returns the URL for the client to upload to, and the S3 key.
                 url, s3_key = generate_presigned_put_url(file_extension)
                 
                 if url and s3_key:
@@ -142,7 +146,7 @@ def submit_metadata():
                         'visit_info': visit_info 
                     })
                     
-        # --- 3C. Temporary/Shared Storage (CALLS REDIS/DB PLACEHOLDER) ---
+        # --- 3C. Temporary/Shared Storage (SAVES STATE via PLACEHOLDER) ---
         save_report_state(report_id, {
             'visit_info': visit_info,
             'report_items': processed_items,
@@ -164,7 +168,7 @@ def submit_metadata():
 
 # =================================================================
 # 4. ROUTE: PHASE 3 - FINALIZE REPORT & GENERATE PDF
-# --- Now using imported S3 helpers and state functions ---
+# Finalizes report generation once client confirms all files are uploaded.
 # =================================================================
 @site_visit_bp.route('/api/submit/finalize', methods=['GET'])
 def finalize_report():
@@ -174,7 +178,7 @@ def finalize_report():
     if not report_id:
         return jsonify({"error": "Missing visit_id parameter for finalization."}), 400
 
-    # --- 1. Retrieve Stored Record (CALLS REDIS/DB PLACEHOLDER) ---
+    # --- 1. Retrieve Stored Record (GETS STATE via PLACEHOLDER) ---
     record = get_report_state(report_id)
     
     if not record:
@@ -186,7 +190,7 @@ def finalize_report():
         signed_urls_data = record['signed_urls_data']
         email_recipient = visit_info.get('email')
         
-        # --- 2. Map S3 Keys back to Items (Unchanged) ---
+        # --- 2. Map S3 Keys back to Items (Reconstruct data structure) ---
         s3_key_map = {}
         for url_data in signed_urls_data:
             key = (url_data['item_index'], url_data['photo_index'])
@@ -205,12 +209,13 @@ def finalize_report():
             item['image_keys'] = image_keys 
         
         # -----------------------------------------------------------------
-        # --- 3. Generate Reports (Using S3 download helpers) ---
+        # --- 3. Generate Reports (Calls utility functions) ---
+        # These utilities must handle fetching files from S3 using the image_keys.
         # -----------------------------------------------------------------
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
         pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
         
-        # --- 4. Send Email (Unchanged) ---
+        # --- 4. Send Email (Calls utility function) ---
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')} - {datetime.now().strftime('%Y-%m-%d')}"
         body = f"""The site visit report for {visit_info.get('building_name', 'Unknown')} on {datetime.now().strftime('%Y-%m-%d')} has been generated and is attached."""
         
@@ -221,6 +226,7 @@ def finalize_report():
         # 5. SUCCESS RESPONSE TO FRONTEND
         return jsonify({
             "status": "success",
+            # Use url_for to generate the full download link
             "excel_url": url_for('site_visit_bp.download_generated', filename=excel_filename, _external=True), 
             "pdf_url": url_for('site_visit_bp.download_generated', filename=pdf_filename, _external=True)
         })
@@ -235,9 +241,10 @@ def finalize_report():
 
 
 # =================================================================
-# 5. Route: Download Generated Files (UNCHANGED)
+# 5. Route: Download Generated Files
 # =================================================================
 @site_visit_bp.route('/generated/<path:filename>')
 def download_generated(filename):
     """Serves the generated files (PDF/Excel) from the GENERATED_DIR."""
+    # This serves the file to the user's browser as a download attachment
     return send_from_directory(GENERATED_DIR, filename, as_attachment=True)
