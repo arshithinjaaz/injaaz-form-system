@@ -4,7 +4,6 @@ import base64
 import time
 import traceback
 from flask import Blueprint, render_template, jsonify, request, url_for, send_from_directory
-from werkzeug.datastructures import FileStorage # Import FileStorage for type hinting
 
 # 1. Import utility functions
 from .utils.email_sender import send_outlook_email 
@@ -23,6 +22,7 @@ GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
 IMAGE_UPLOAD_DIR = os.path.join(GENERATED_DIR, "images")
 
 # --- CRITICAL FIX 1: Define Absolute Path for Logo ---
+# Assuming 'static' folder is parallel to the 'site_visit_bp' folder (i.e., in BASE_DIR)
 LOGO_ABSOLUTE_PATH = os.path.join(BASE_DIR, 'static', 'INJAAZ.png') 
 # --- END LOGO PATH ---
 
@@ -36,42 +36,16 @@ site_visit_bp = Blueprint(
 )
 
 
-# --- NEW HELPER FUNCTION: Save Uploaded Files (for Item Photos) ---
-def save_uploaded_file(file: FileStorage, filename_prefix):
-    """Saves an uploaded FileStorage object to the IMAGE_UPLOAD_DIR."""
-    os.makedirs(IMAGE_UPLOAD_DIR, exist_ok=True)
-    
-    if not file:
-        print(f"DEBUG_SAVE: Invalid or empty file received for {filename_prefix}")
-        return None
-        
-    try:
-        # Preserve the original file extension if possible, or default to .png
-        extension = os.path.splitext(file.filename)[1] if file.filename else '.png'
-        
-        timestamp = int(time.time() * 1000)
-        filename = f"{filename_prefix}_{timestamp}{extension}"
-        file_path = os.path.join(IMAGE_UPLOAD_DIR, filename)
-
-        file.save(file_path) # Save the uploaded file directly
-            
-        print(f"DEBUG_SAVE: Successfully saved {filename} to {file_path}")
-        
-        return filename
-        
-    except Exception as e:
-        print(f"Error saving uploaded file: {e}")
-        return None
-
-# --- EXISTING HELPER FUNCTION: Decode and Save Base64 Images/Signatures (Used ONLY for Signatures) ---
-# Keep this function as is, since signatures are small and still sent as Base64 strings.
+# --- HELPER FUNCTION: Decode and Save Base64 Images/Signatures ---
 def save_base64_image(base64_data, filename_prefix):
     """Decodes a base64 image string and saves it to the IMAGE_UPLOAD_DIR."""
     os.makedirs(IMAGE_UPLOAD_DIR, exist_ok=True)
     
+    # --- DEBUGGING LINE 1 ---
     if not base64_data or not isinstance(base64_data, str) or len(base64_data) < 100:
         print(f"DEBUG_SAVE: Invalid or empty base64 data for {filename_prefix}")
         return None
+    # --- END DEBUGGING LINE 1 ---
         
     try:
         if ',' in base64_data:
@@ -86,7 +60,9 @@ def save_base64_image(base64_data, filename_prefix):
         with open(file_path, 'wb') as f:
             f.write(img_data)
             
+        # --- DEBUGGING LINE 2 ---
         print(f"DEBUG_SAVE: Successfully saved {filename} to {file_path}")
+        # --- END DEBUGGING LINE 2 ---
         
         return filename
         
@@ -96,42 +72,60 @@ def save_base64_image(base64_data, filename_prefix):
 
 
 # =================================================================
-# 4. Route: Form Submission (Called by POST to /submit) - UPDATED FOR FormData
+# 1. Route: Main Form Page
+# =================================================================
+@site_visit_bp.route('/form') 
+def index():
+    """Renders the main site visit form template (site_visit_form.html)."""
+    return render_template('site_visit_form.html') 
+
+
+# =================================================================
+# 2. Route: Dropdown Data Endpoint
+# =================================================================
+@site_visit_bp.route('/dropdowns')
+def get_dropdown_data():
+    """Reads the dropdown_data.json file and returns its content as JSON."""
+    try:
+        with open(DROPDOWN_DATA_PATH, 'r') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except FileNotFoundError:
+        print(f"ERROR: Dropdown data file not found at: {DROPDOWN_DATA_PATH}")
+        return jsonify({"error": "Dropdown data file not found"}), 404
+    except json.JSONDecodeError:
+        print(f"ERROR: Could not decode JSON data in: {DROPDOWN_DATA_PATH}")
+        return jsonify({"error": "Invalid JSON data"}), 500
+
+
+# =================================================================
+# 4. Route: Form Submission (Called by POST to /submit)
 # =================================================================
 @site_visit_bp.route('/submit', methods=['POST'])
 def submit():
     # 1. Setup
-    # CRITICAL CHANGE: Read the main data structure from request.form as a JSON string
-    try:
-        data_json_string = request.form.get('data')
-        if not data_json_string:
-            return jsonify({"error": "No main JSON data string received in 'data' field."}), 400
-            
-        data = json.loads(data_json_string)
-    except json.JSONDecodeError:
-        return jsonify({"error": "Invalid JSON format for the main form data."}), 400
-    except Exception as e:
-        return jsonify({"error": f"Failed to process form data: {str(e)}"}), 400
-        
+    data = request.get_json()
     temp_image_paths = [] 
     final_items = [] 
     
     excel_path = None
     pdf_path = None
     
+    if not data:
+        return jsonify({"error": "No data received."}), 400
+
     # 2. Extract Data
     visit_info = data.get('visit_info', {})
     processed_items = data.get('report_items', []) 
     signatures = data.get('signatures', {}) 
-    
+
     email_recipient = visit_info.get('email')
     
     try:
-        # --- 3. Process Signatures (STILL using Base64 helper) ---
+        # --- 3. Process Signatures (Omitted for brevity, but same logic applies) ---
         tech_sig_data = signatures.get('tech_signature')
         opMan_sig_data = signatures.get('opMan_signature')
         
-        # Save signature Base64 data (it's small, so this is fine)
         tech_sig_filename = save_base64_image(tech_sig_data, 'tech_sig')
         opMan_sig_filename = save_base64_image(opMan_sig_data, 'opman_sig')
 
@@ -145,64 +139,36 @@ def submit():
         visit_info['opMan_signature_path'] = opMan_sig_path
 
         # -----------------------------------------------------------------
-        # --- 4. Process Report Item Photos (NEW LOGIC) ---
+        # --- 4. Process Report Item Photos ---
         # -----------------------------------------------------------------
         item_photo_count = 0
-        
-        # request.files is a dictionary-like object mapping field names to FileStorage objects
-        # The frontend will send files with names like 'photo-item-0-0', 'photo-item-0-1', 'photo-item-1-0', etc.
-        
-        # Create a mapping of item_index to a list of file paths
-        item_paths_map = {}
-        for file_key, file_storage in request.files.items():
-            # Check if the file_key matches our naming convention, e.g., 'photo-item-0-0'
-            if file_key.startswith('photo-item-'):
-                try:
-                    # Extract item index (e.g., '0' from 'photo-item-0-0')
-                    item_index = int(file_key.split('-')[2]) 
-                    
-                    # Create a safe prefix using item details from the data structure
-                    # Use index to match file to item
-                    if item_index < len(processed_items):
-                        item = processed_items[item_index]
-                        prefix = f"{visit_info.get('building_name', 'item')}_{item.get('asset', 'asset')}_{item_index}"
-                        prefix = prefix.replace(' ', '_')[:30] 
-                        
-                        # Save the actual uploaded file using the new helper function
-                        filename = save_uploaded_file(file_storage, prefix) 
-                        
-                        if filename:
-                            path = os.path.join(IMAGE_UPLOAD_DIR, filename)
-                            
-                            if item_index not in item_paths_map:
-                                item_paths_map[item_index] = []
-                                
-                            item_paths_map[item_index].append(path)
-                            temp_image_paths.append(path) # Add to cleanup list
-                            item_photo_count += 1
-                        
-                except (ValueError, IndexError):
-                    # Should not happen if frontend logic is correct
-                    print(f"ERROR: Could not parse item index from file key: {file_key}")
-                    continue
-
-        # Now, integrate the saved file paths back into the processed_items structure
-        for index, item in enumerate(processed_items):
-            # Assign the list of saved paths for this item, default to empty list
-            item['image_paths'] = item_paths_map.get(index, []) 
+        for item in processed_items:
+            item_image_paths = []
             
-            # The 'photos' field now contains the list of image keys (indices)
-            # We don't need the Base64 data anymore, but we must make sure the image_paths are correct.
-            # We can still pop 'photos' as it was just a temporary holder of the Base64 data in the old flow.
-            item.pop('photos', None) 
+            for i, base64_photo_data in enumerate(item.get('photos', [])):
+                prefix = f"{visit_info.get('building_name', 'item')}_{item.get('asset', 'asset')}_{i}"
+                prefix = prefix.replace(' ', '_')[:30] 
+                
+                filename = save_base64_image(base64_photo_data, prefix) 
+                
+                if filename:
+                    path = os.path.join(IMAGE_UPLOAD_DIR, filename)
+                    item_image_paths.append(path)
+                    temp_image_paths.append(path) # Add to cleanup list for images only
+                    item_photo_count += 1
+
+            # CRITICAL: Pass file paths, not Base64 data, to utility functions.
+            item['image_paths'] = item_image_paths
+            item.pop('photos', None) # Remove large base64 data
+            
             final_items.append(item)
             
-        # --- DEBUGGING LINE ---
+        # --- DEBUGGING LINE 3 (CRITICAL) ---
         print(f"DEBUG_SUBMIT: Total photos received and processed: {item_photo_count}")
         print(f"DEBUG_SUBMIT: Checking {len(temp_image_paths)} saved paths before PDF generation...")
         for path in temp_image_paths:
             print(f"DEBUG_SUBMIT: Path check: {path}, Exists: {os.path.exists(path)}")
-        # --- END DEBUGGING LINE ---
+        # --- END DEBUGGING LINE 3 ---
             
         # -----------------------------------------------------------------
         # --- 5. Generate Excel Report ---
@@ -215,6 +181,7 @@ def submit():
         pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR, logo_path=LOGO_ABSOLUTE_PATH)
         
         # --- 7. Send Email ---
+        # ... (email logic omitted) ...
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')}"
         body = f"""...""" # Shortened body text
         attachments = [excel_path, pdf_path]
@@ -226,11 +193,11 @@ def submit():
         # 8. Cleanup (TEMPORARILY COMMENTED OUT FOR DEBUGGING)
         # ----------------------
         # for path in temp_image_paths:
-        #    try:
-        #        if os.path.isfile(path): 
-        #            os.remove(path)
-        #    except OSError as e:
-        #        print(f"Error deleting temp image file {path}: {e}")
+        #     try:
+        #         if os.path.isfile(path): 
+        #             os.remove(path)
+        #     except OSError as e:
+        #         print(f"Error deleting temp image file {path}: {e}")
 
         # ----------------------
         # 9. RESPONSE TO FRONTEND
@@ -242,7 +209,6 @@ def submit():
         })
 
     except Exception as e:
-        # ... (Error handling remains the same) ...
         error_details = traceback.format_exc()
         
         print("\n--- SERVER ERROR TRACEBACK START (ROOT CAUSE) ---")
@@ -262,5 +228,3 @@ def submit():
             "status": "error",
             "error": f"Internal server error: Failed to process report. Reason: {type(e).__name__}: {str(e)}"
         }), 500
-
-# Other routes (index, get_dropdown_data) remain unchanged
