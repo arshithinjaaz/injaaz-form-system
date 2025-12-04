@@ -1,5 +1,6 @@
 import os
 import time
+import io # CRITICAL IMPORT for in-memory file handling
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph, Image, PageBreak
@@ -7,12 +8,11 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from datetime import datetime
 import logging
-from PIL import Image as PilImage, ImageStat, ImageDraw
+from PIL import Image as PilImage, ImageStat, ImageDraw # Keep PIL import
 import tempfile 
 import shutil 
 
 # --- Logging Configuration ---
-# Set up a basic logger to track file operations
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -36,19 +36,26 @@ styles.add(ParagraphStyle(name='Question', fontName='Helvetica-Bold', fontSize=1
 styles.add(ParagraphStyle(name='Answer', fontName='Helvetica', fontSize=10, leading=12))
 styles.add(ParagraphStyle(name='SmallText', fontName='Helvetica', fontSize=8, leading=10))
 
-# --- MEMORY OPTIMIZATION HELPER (REVISED TO USE TEMPFILE) ---
+# --------------------------------------------------------------------------------------
+# --- CRITICAL REVISION: IN-MEMORY IMAGE HANDLING (NO TEMP FILES) ---
+# --------------------------------------------------------------------------------------
 
-def resize_image_for_pdf(file_path, max_dimension=800):
+def resize_image_to_bytes(file_path, max_dimension=800):
     """
-    Resizes the image using Pillow and saves it to a secure, unique temporary file.
-    Returns the path to the temporary, resized file.
+    Resizes the image using Pillow and returns the image data as a BytesIO object.
+    This avoids writing temporary files to the disk.
+    Returns: (io.BytesIO object, original format string) or (None, None)
     """
     if not os.path.exists(file_path):
         logger.warning(f"Original file not found: {file_path}")
-        return file_path
+        return None, None
 
     try:
         img = PilImage.open(file_path)
+        
+        # Determine format for saving - ReportLab prefers PNG/JPEG
+        img_format = img.format if img.format in ['JPEG', 'PNG'] else 'PNG'
+        
         img_width, img_height = img.size
         
         # Calculate ratio to maintain aspect ratio and fit within max_dimension
@@ -60,83 +67,86 @@ def resize_image_for_pdf(file_path, max_dimension=800):
         if ratio < 1: # Only resize if it's currently too big
             new_width = int(img_width * ratio)
             new_height = int(img_height * ratio)
+            # Ensure mode compatibility before resizing (e.g., convert RGBA to RGB if saving as JPEG)
+            if img_format == 'JPEG' and img.mode == 'RGBA':
+                img = img.convert('RGB')
+                
             img = img.resize((new_width, new_height), resample_filter)
         
-        # Use tempfile to create a secure, auto-cleaned file object
-        suffix = os.path.splitext(file_path)[1]
-        if not suffix: suffix = '.jpg' # Fallback suffix
-        
-        # Create a named temp file that we can read from later
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            temp_path = tmp.name 
-            # Save the resized image to the unique temporary path
-            img.save(temp_path, quality=85)
+        # Save the resized image to an in-memory stream
+        img_byte_arr = io.BytesIO()
+        # Set format explicitly for the stream
+        img.save(img_byte_arr, format=img_format, quality=85)
         
         # Explicitly close the PIL image and release resources
         img.close()
         
-        return temp_path
+        # Rewind the stream to the beginning
+        img_byte_arr.seek(0)
+        
+        return img_byte_arr, img_format
 
     except Exception as e:
-        logger.error(f"Pillow resize/save failed for {file_path}. Error: {e}")
-        # Return original path if resize fails
-        return file_path
+        logger.error(f"Pillow resize/save to bytes failed for {file_path}. Error: {e}")
+        return None, None
 
-def cleanup_temp_file(temp_path, original_path):
-    """Safely cleans up a temporary file if it exists and is not the original file."""
-    if temp_path and temp_path != original_path and os.path.exists(temp_path):
-        try:
-            os.remove(temp_path)
-            logger.debug(f"Successfully cleaned up temp file: {temp_path}")
-        except OSError as e:
-            logger.warning(f"Failed to clean up temp file {temp_path}: {e}")
 
 def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
     """
-    Loads a ReportLab Image object after resizing the source file for memory optimization.
-    Returns the ReportLab Image object and the path of the temporary file for cleanup.
+    Loads a ReportLab Image object using an in-memory stream after resizing.
+    Returns the ReportLab Image object. No temporary file cleanup is needed.
     """
     if not file_path or not os.path.exists(file_path):
         logger.warning(f"Image file not found for PDF: {file_path}")
-        return Paragraph(f'<font size="8">{placeholder_text}</font>', styles['SmallText']), None
+        return Paragraph(f'<font size="8">{placeholder_text}</font>', styles['SmallText'])
 
-    # CRITICAL STEP: Resize the image data (returns original path if it fails)
-    temp_file_path = resize_image_for_pdf(file_path) 
+    # CRITICAL STEP: Resize the image data and get an in-memory stream
+    img_stream, img_format = resize_image_to_bytes(file_path) 
     
+    if img_stream is None:
+        return Paragraph(f'<font size="8">Image Load Error</font>', styles['SmallText'])
+        
     try:
-        # ReportLab now loads the smaller, temporary file (or original file if resize failed)
-        img = Image(temp_file_path)
+        # ReportLab's Image constructor can take a file-like object (BytesIO)
+        img = Image(img_stream)
         img.drawWidth = width
         img.drawHeight = height
         img.hAlign = 'CENTER'
-        # Return the image object and the temp path for cleanup in the calling function
-        return img, temp_file_path
+        # Return the image object. 
+        return img
+        
     except Exception as e:
-        logger.error(f"ReportLab Image load error for path {temp_file_path}: {e}")
-        # If loading the image fails, return a placeholder and the temp_file_path for attempted cleanup
-        return Paragraph(f'<font size="8">Image Load Error</font>', styles['SmallText']), temp_file_path
+        logger.error(f"ReportLab Image load error from stream for path {file_path}: {e}")
+        return Paragraph(f'<font size="8">Image Load Error</font>', styles['SmallText'])
+        
+    finally:
+        # IMPORTANT: Close the BytesIO stream to free up memory
+        if img_stream:
+            img_stream.close()
 
 
 def get_sig_image_from_path(file_path, name):
-    """Loads signature from a file path and handles cleanup internally."""
-    temp_path = file_path # Initialize temp_path to file_path for safety
-    
+    """Loads signature from a file path using in-memory stream."""
+    img_stream = None
     if file_path and os.path.exists(file_path):
         try:
-            # Signatures are small, so we use a smaller max dimension for optimization
-            temp_path = resize_image_for_pdf(file_path, max_dimension=400) 
+            # Signatures are small, use a smaller max dimension
+            img_stream, img_format = resize_image_to_bytes(file_path, max_dimension=400) 
             
-            sig_img = Image(temp_path)
-            sig_img.drawHeight = 0.7 * inch
-            sig_img.drawWidth = 2.5 * inch
-            sig_img.hAlign = 'LEFT' 
-            return sig_img
+            if img_stream:
+                sig_img = Image(img_stream)
+                sig_img.drawHeight = 0.7 * inch
+                sig_img.drawWidth = 2.5 * inch
+                sig_img.hAlign = 'LEFT' 
+                return sig_img
+            
         except Exception as e:
             logger.error(f"Failed to load signature image for {name} from {file_path}: {e}")
             return Paragraph(f'Image Load Failed: {name}', styles['Normal'])
         finally:
-            # Clean up the signature temp file immediately
-            cleanup_temp_file(temp_path, file_path)
+            # Close the stream immediately after ReportLab consumes it
+            if img_stream:
+                img_stream.close()
             
     return Paragraph(f'Unsigned: {name}', styles['Normal']) 
 
@@ -149,11 +159,11 @@ def create_signature_table(visit_info):
     sig_story.append(Paragraph('4. Signatures', styles['BoldTitle'])) 
     sig_story.append(Spacer(1, 0.1*inch)) 
 
-    # Retrieve file paths saved in routes.py
+    # Retrieve file paths 
     tech_sig_path = visit_info.get('tech_signature_path')
     opMan_sig_path = visit_info.get('opMan_signature_path')
 
-    # Load images (get_sig_image_from_path handles its own temp cleanup)
+    # Load images (get_sig_image_from_path handles its own stream closure)
     tech_sig = get_sig_image_from_path(tech_sig_path, 'Technician')
     opMan_sig = get_sig_image_from_path(opMan_sig_path, 'Operation Manager')
 
@@ -192,7 +202,6 @@ def create_extra_photo_grid(extra_image_paths):
         return []
 
     story = []
-    temp_files_to_clean = []
     
     PHOTO_WIDTH = 1.5 * inch
     PHOTO_HEIGHT = 1.2 * inch 
@@ -203,55 +212,45 @@ def create_extra_photo_grid(extra_image_paths):
     
     photo_elements = []
     
-    try:
-        for img_path in extra_image_paths:
-            # Load image and get temp path for cleanup
-            photo, temp_path = get_image_from_path(img_path, PHOTO_WIDTH, PHOTO_HEIGHT, placeholder_text="Image Missing")
-            
-            # CRITICAL: Only clean up temporary resized files
-            if temp_path and temp_path != img_path: 
-                temp_files_to_clean.append(temp_path)
-            
-            photo.hAlign = 'CENTER' # Changed from RIGHT for better grid alignment
-            photo_elements.append(photo)
-            
-            # Aggressive cleanup: Delete objects immediately
-            del photo
+    for img_path in extra_image_paths:
+        # Load image (now returns only the ReportLab image object)
+        photo = get_image_from_path(img_path, PHOTO_WIDTH, PHOTO_HEIGHT, placeholder_text="Image Missing")
         
-        # Arrange photos in rows of MAX_COLS
-        if photo_elements:
-            PAGE_WIDTH = 7.27 * inch
-            MAX_COLS = 4
-            COL_WIDTH = PAGE_WIDTH / MAX_COLS
-            
-            num_photos = len(photo_elements)
-            rows = []
-            
-            for i in range(0, num_photos, MAX_COLS):
-                row_elements = photo_elements[i:i + MAX_COLS]
-                # Pad the last row if necessary
-                if len(row_elements) < MAX_COLS:
-                     row_elements.extend([Paragraph('', styles['Normal'])] * (MAX_COLS - len(row_elements)))
-                rows.append(row_elements)
+        photo.hAlign = 'CENTER' 
+        photo_elements.append(photo)
+        
+        # Aggressive cleanup: Delete objects immediately
+        del photo
+    
+    # Arrange photos in rows of MAX_COLS
+    if photo_elements:
+        PAGE_WIDTH = 7.27 * inch
+        MAX_COLS = 4
+        COL_WIDTH = PAGE_WIDTH / MAX_COLS
+        
+        num_photos = len(photo_elements)
+        rows = []
+        
+        for i in range(0, num_photos, MAX_COLS):
+            row_elements = photo_elements[i:i + MAX_COLS]
+            # Pad the last row if necessary
+            if len(row_elements) < MAX_COLS:
+                 row_elements.extend([Paragraph('', styles['Normal'])] * (MAX_COLS - len(row_elements)))
+            rows.append(row_elements)
 
-            if rows:
-                photo_grid_table = Table(rows, colWidths=[COL_WIDTH] * MAX_COLS, rowHeights=[PHOTO_HEIGHT + 0.1*inch] * len(rows)) # Fixed row height
-                
-                photo_grid_table.setStyle(TableStyle([
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'), 
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                    ('TOPPADDING', (0, 0), (-1, -1), 0),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10), 
-                ]))
-                story.append(photo_grid_table)
-                del photo_grid_table # Aggressive cleanup
+        if rows:
+            photo_grid_table = Table(rows, colWidths=[COL_WIDTH] * MAX_COLS, rowHeights=[PHOTO_HEIGHT + 0.1*inch] * len(rows)) 
             
-    finally:
-        # CRITICAL: Clean up all temporary files created during this process
-        for tmp_file in temp_files_to_clean:
-            cleanup_temp_file(tmp_file, None)
+            photo_grid_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'), 
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 10), 
+            ]))
+            story.append(photo_grid_table)
+            del photo_grid_table # Aggressive cleanup
             
     return story
 
@@ -263,15 +262,12 @@ def create_report_photo_items_table(visit_info, processed_items):
     story.append(Spacer(1, 0.1*inch))
     
     IMG_COL_WIDTH = 1.75 * inch
-    IMG_WIDTH = 1.6 * inch # Slightly smaller than column
+    IMG_WIDTH = 1.6 * inch 
     IMG_HEIGHT = 1.3 * inch 
     PAGE_WIDTH = 7.27 * inch 
     DETAILS_COL_WIDTH = PAGE_WIDTH - IMG_COL_WIDTH
     
     for i, item in enumerate(processed_items):
-        
-        # List to track temp files for this item
-        temp_files_to_clean = []
         
         # Only process items that have at least one valid photo path
         if not item.get('image_paths') or not os.path.exists(item['image_paths'][0]):
@@ -288,12 +284,8 @@ def create_report_photo_items_table(visit_info, processed_items):
                 ]
             ]
             
-            # Load image (calls Pillow resize internally)
-            item_image, temp_path = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
-            
-            # CRITICAL: Only clean up if a new temporary file was created
-            if temp_path and temp_path != img_path:
-                temp_files_to_clean.append(temp_path)
+            # Load image (now returns only the ReportLab image object)
+            item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
             
             details_text = f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}<br/>"
             details_text += f"<b>Description:</b> {item['description']}<br/>"
@@ -316,8 +308,8 @@ def create_report_photo_items_table(visit_info, processed_items):
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('TOPPADDING', (0, 0), (-1, -1), 5),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                ('VALIGN', (0, 1), (-1, 1), 'MIDDLE'), # Ensure image and text are centered vertically
-                ('ALIGN', (0, 1), (0, 1), 'CENTER'), # Center image in its column
+                ('VALIGN', (0, 1), (-1, 1), 'MIDDLE'), 
+                ('ALIGN', (0, 1), (0, 1), 'CENTER'), 
             ]
             
             item_summary_table.setStyle(TableStyle(header_style_commands))
@@ -326,7 +318,7 @@ def create_report_photo_items_table(visit_info, processed_items):
             # --- ADD EXTRA PHOTOS BELOW THE TABLE ---
             if len(item['image_paths']) > 1:
                 extra_image_paths = item['image_paths'][1:]
-                # create_extra_photo_grid handles its own temp file cleanup
+                # create_extra_photo_grid handles its own image stream cleanup
                 story.extend(create_extra_photo_grid(extra_image_paths)) 
 
             story.append(Spacer(1, 0.1 * inch))
@@ -339,10 +331,7 @@ def create_report_photo_items_table(visit_info, processed_items):
             logger.error(f"Error processing item {i+1} for photo table: {e}")
             story.append(Paragraph(f"**Error rendering item {i+1}: {e}**", styles['Answer']))
             
-        finally:
-            # Clean up temporary files created just for the first image of the current item
-            for tmp_file in temp_files_to_clean:
-                cleanup_temp_file(tmp_file, img_path)
+        # No finally block needed here for file cleanup anymore!
             
     if not story:
         story.append(Paragraph('No items with photos were selected for this report section.', styles['Normal']))
@@ -380,11 +369,11 @@ def build_report_story(visit_info, processed_items, logo_path):
     title_paragraph = Paragraph(f"<b>{title_text}</b>", styles['BoldTitle']) 
     
     logo_image = Paragraph('', styles['Normal'])
-    temp_logo_path = None # Initialize temp path for cleanup
 
     try:
         if logo_path and os.path.exists(logo_path):
-            logo_img, temp_logo_path = get_image_from_path(logo_path, 1.0 * inch, 0.9 * inch, placeholder_text="No Logo")
+            # No temp path returned anymore
+            logo_img = get_image_from_path(logo_path, 1.0 * inch, 0.9 * inch, placeholder_text="No Logo")
             logo_img.hAlign = 'RIGHT'
             logo_image = logo_img
         else:
@@ -392,9 +381,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     except Exception as e:
         logger.error(f"Failed to load logo image: {e}")
 
-    finally:
-        # Clean up temp logo file immediately after ReportLab loads it
-        cleanup_temp_file(temp_logo_path, logo_path)
+    # No finally block needed for logo cleanup
 
     
     header_data = [[title_paragraph, logo_image]]
@@ -481,7 +468,7 @@ def build_report_story(visit_info, processed_items, logo_path):
 def generate_visit_pdf(visit_info, processed_items, output_dir, logo_path): 
     
     building_name = visit_info.get('building_name', 'Unknown').replace(' ', '_')
-    # Use microseconds or a random component for greater uniqueness
+    # Use microseconds for greater uniqueness
     ts = datetime.now().strftime('%Y%m%d%H%M%S%f')
     pdf_filename = f"Site_Visit_Report_{building_name}_{ts}.pdf"
     pdf_path = os.path.join(output_dir, pdf_filename)
@@ -508,30 +495,27 @@ def generate_visit_pdf(visit_info, processed_items, output_dir, logo_path):
 # --------------------------------------------------------------------------------------
 # --- EXECUTION BLOCK FOR TESTING ---
 # --------------------------------------------------------------------------------------
+# This section remains for local testing but should be removed or contained 
+# if deployment to a production environment is the goal and you are sure 
+# the image paths will work.
 
 if __name__ == "__main__":
     
     # ----------------------------------------------------------------------------------
-    # !!! IMPORTANT: REPLACE THESE PATHS WITH ACTUAL, VALID FILES IN YOUR SYSTEM !!!
+    # !!! IMPORTANT: Ensure the test_images directory is clean before running tests. !!!
     # ----------------------------------------------------------------------------------
     
     # 1. Configuration and Paths
-    # Ensure this directory exists and your script has write permissions
     OUTPUT_DIRECTORY = os.path.join(os.getcwd(), "generated_reports") 
-    
-    # Create the output directory if it doesn't exist
     os.makedirs(OUTPUT_DIRECTORY, exist_ok=True) 
     
-    # --- Mock Image Creation (to ensure the code runs without actual images) ---
-    # In a real environment, you would use existing image files.
-    # We create small placeholder images here so the code executes successfully.
+    IMAGE_DIR = os.path.join(os.getcwd(), "test_images")
     
+    # --- Mock Image Creation (Ensuring it runs locally) ---
     def create_mock_image(filepath, size, color):
-        """Creates a simple colored placeholder image if the file doesn't exist."""
         if not os.path.exists(filepath):
             try:
                 img = PilImage.new('RGB', size, color=color)
-                # Add text to make it clear what it is
                 d = ImageDraw.Draw(img)
                 d.text((10, 10), os.path.basename(filepath), fill=(0,0,0))
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -539,8 +523,6 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.error(f"Could not create mock image at {filepath}: {e}")
                 
-    IMAGE_DIR = os.path.join(os.getcwd(), "test_images")
-    
     LOGO_PATH_MOCK = os.path.join(IMAGE_DIR, "logo.png")
     SIG_TECH_PATH_MOCK = os.path.join(IMAGE_DIR, "signature_tech.png")
     SIG_OPMAN_PATH_MOCK = os.path.join(IMAGE_DIR, "signature_opman.png")
@@ -553,7 +535,7 @@ if __name__ == "__main__":
     create_mock_image(LOGO_PATH_MOCK, (300, 200), 'green')
     create_mock_image(SIG_TECH_PATH_MOCK, (400, 150), 'lightgray')
     create_mock_image(SIG_OPMAN_PATH_MOCK, (400, 150), 'lightgray')
-    create_mock_image(PHOTO_A_1_MOCK, (1000, 800), 'lightblue') # Large image to test resizing
+    create_mock_image(PHOTO_A_1_MOCK, (1000, 800), 'lightblue') 
     create_mock_image(PHOTO_A_2_MOCK, (400, 300), 'lightcoral')
     create_mock_image(PHOTO_A_3_MOCK, (400, 300), 'lightyellow')
     create_mock_image(PHOTO_B_1_MOCK, (800, 600), 'lightgreen')
@@ -584,8 +566,6 @@ if __name__ == "__main__":
                 PHOTO_A_1_MOCK, 
                 PHOTO_A_2_MOCK,
                 PHOTO_A_3_MOCK, 
-                # Add a dummy non-existent file path to test error handling and cleanup
-                # os.path.join(IMAGE_DIR, "non_existent_photo.jpg") 
             ]
         },
         {
@@ -606,7 +586,7 @@ if __name__ == "__main__":
             'quantity': '1',
             'brand': 'XPLARE',
             'comments': 'Old unit is seized. Replacement required.',
-            'image_paths': [] # Item without photos
+            'image_paths': [] 
         }
     ]
 
