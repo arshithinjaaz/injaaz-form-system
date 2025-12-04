@@ -10,11 +10,16 @@ from flask import Blueprint, render_template, jsonify, request, url_for, send_fr
 # --- 1. CORE IMPORTS ---
 # =================================================================
 
-# IMPORTANT: The following functions MUST be defined in a sibling file named 's3_utils.py'
-from .utils import (
+# --- 1. CORE IMPORTS ---
+
+# ...
+# The S3 utility functions are now in a file named s3_utils_config.py
+from .s3_utils_config import ( 
     generate_presigned_put_url,
     decode_base64_to_s3
 )
+# ...
+
 
 # IMPORTANT: The following utility functions MUST be defined in 'utils/'
 from .utils.email_sender import send_outlook_email 
