@@ -13,4 +13,5 @@ COPY . .
 
 # Tell the cloud how to run your app, using gunicorn to start Injaaz.py
 # The command is: gunicorn [file_name_without_.py]:[flask_app_variable]
-CMD exec gunicorn Injaaz:app -b 0.0.0.0:$PORT
+# *** CORRECTION: Added --timeout 60 to prevent 502 Bad Gateway due to worker timeout ***
+CMD exec gunicorn --timeout 60 Injaaz:app -b 0.0.0.0:$PORT
