@@ -21,11 +21,8 @@ GENERATED_DIR_NAME = "generated"
 GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
 IMAGE_UPLOAD_DIR = os.path.join(GENERATED_DIR, "images")
 
-# --- CRITICAL FIX 1: Define Absolute Path for Logo ---
-# Assuming 'static' folder is parallel to the 'site_visit_bp' folder (i.e., in BASE_DIR)
+# --- Define Absolute Path for Logo ---
 LOGO_ABSOLUTE_PATH = os.path.join(BASE_DIR, 'static', 'INJAAZ.png') 
-# --- END LOGO PATH ---
-
 
 # Define the Blueprint
 site_visit_bp = Blueprint(
@@ -37,15 +34,14 @@ site_visit_bp = Blueprint(
 
 
 # --- HELPER FUNCTION: Decode and Save Base64 Images/Signatures ---
+# NOTE: This function is still used for signatures, as they are sent as Base64 strings.
 def save_base64_image(base64_data, filename_prefix):
     """Decodes a base64 image string and saves it to the IMAGE_UPLOAD_DIR."""
     os.makedirs(IMAGE_UPLOAD_DIR, exist_ok=True)
     
-    # --- DEBUGGING LINE 1 ---
     if not base64_data or not isinstance(base64_data, str) or len(base64_data) < 100:
         print(f"DEBUG_SAVE: Invalid or empty base64 data for {filename_prefix}")
         return None
-    # --- END DEBUGGING LINE 1 ---
         
     try:
         if ',' in base64_data:
@@ -60,9 +56,7 @@ def save_base64_image(base64_data, filename_prefix):
         with open(file_path, 'wb') as f:
             f.write(img_data)
             
-        # --- DEBUGGING LINE 2 ---
         print(f"DEBUG_SAVE: Successfully saved {filename} to {file_path}")
-        # --- END DEBUGGING LINE 2 ---
         
         return filename
         
@@ -99,22 +93,38 @@ def get_dropdown_data():
 
 
 # =================================================================
-# 4. Route: Form Submission (Called by POST to /submit)
+# 3. Route: Form Submission (Called by POST to /submit)
 # =================================================================
 @site_visit_bp.route('/submit', methods=['POST'])
 def submit():
     # 1. Setup
-    data = request.get_json()
-    temp_image_paths = [] 
-    final_items = [] 
-    
+    temp_image_paths = []
+    final_items = []
     excel_path = None
     pdf_path = None
     
-    if not data:
-        return jsonify({"error": "No data received."}), 400
+    # --- CRITICAL FIX: Extract Data from multipart/form-data ---
+    # The JSON payload is sent as a string under the key 'data' in the form data.
+    data_json_string = request.form.get('data') 
+    
+    if not data_json_string:
+        return jsonify({"error": "Missing main data payload ('data') in request form. Ensure 'Content-Type' is NOT set to application/json on the client."}), 400
 
-    # 2. Extract Data
+    try:
+        # Deserialize the JSON string payload
+        data = json.loads(data_json_string) 
+        
+        # Access all uploaded files (photos)
+        uploaded_files = request.files 
+        
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid JSON format in 'data' payload."}), 400
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse request data: {str(e)}"}), 400
+    # --- END CRITICAL FIX ---
+
+
+    # 2. Extract Data (uses the now-loaded 'data' dictionary)
     visit_info = data.get('visit_info', {})
     processed_items = data.get('report_items', []) 
     signatures = data.get('signatures', {}) 
@@ -122,7 +132,7 @@ def submit():
     email_recipient = visit_info.get('email')
     
     try:
-        # --- 3. Process Signatures (Omitted for brevity, but same logic applies) ---
+        # --- 3. Process Signatures (STILL base64) ---
         tech_sig_data = signatures.get('tech_signature')
         opMan_sig_data = signatures.get('opMan_signature')
         
@@ -139,36 +149,40 @@ def submit():
         visit_info['opMan_signature_path'] = opMan_sig_path
 
         # -----------------------------------------------------------------
-        # --- 4. Process Report Item Photos ---
+        # --- 4. Process Report Item Photos (NEW FILE HANDLING LOGIC) ---
         # -----------------------------------------------------------------
         item_photo_count = 0
-        for item in processed_items:
+        
+        # Iterate through the submitted items from the JSON payload (processed_items)
+        for item_index, item in enumerate(processed_items):
             item_image_paths = []
             
-            for i, base64_photo_data in enumerate(item.get('photos', [])):
-                prefix = f"{visit_info.get('building_name', 'item')}_{item.get('asset', 'asset')}_{i}"
-                prefix = prefix.replace(' ', '_')[:30] 
-                
-                filename = save_base64_image(base64_photo_data, prefix) 
-                
-                if filename:
+            # The files were uploaded with the key pattern: 'photo-item-{itemIndex}-{photoIndex}'
+            # We iterate through all uploaded_files to find the matching photos for this item
+            for file_key, file_storage in uploaded_files.items():
+                if file_key.startswith(f"photo-item-{item_index}-"):
+                    
+                    # Generate a unique filename and path
+                    timestamp = int(time.time() * 1000)
+                    filename = f"report_item_{item_index}_{item_photo_count}_{timestamp}.png"
                     path = os.path.join(IMAGE_UPLOAD_DIR, filename)
+                    
+                    # Ensure directory exists before saving
+                    os.makedirs(IMAGE_UPLOAD_DIR, exist_ok=True)
+                    
+                    # Save the uploaded file (FileStorage object)
+                    file_storage.save(path)
+                    
                     item_image_paths.append(path)
-                    temp_image_paths.append(path) # Add to cleanup list for images only
+                    temp_image_paths.append(path) # Add to cleanup list
                     item_photo_count += 1
-
-            # CRITICAL: Pass file paths, not Base64 data, to utility functions.
-            item['image_paths'] = item_image_paths
-            item.pop('photos', None) # Remove large base64 data
             
+            # Pass file paths, not Base64 data, to utility functions.
+            item['image_paths'] = item_image_paths
             final_items.append(item)
             
-        # --- DEBUGGING LINE 3 (CRITICAL) ---
         print(f"DEBUG_SUBMIT: Total photos received and processed: {item_photo_count}")
-        print(f"DEBUG_SUBMIT: Checking {len(temp_image_paths)} saved paths before PDF generation...")
-        for path in temp_image_paths:
-            print(f"DEBUG_SUBMIT: Path check: {path}, Exists: {os.path.exists(path)}")
-        # --- END DEBUGGING LINE 3 ---
+        # Note: You should have a separate route for downloading files, which is assumed here.
             
         # -----------------------------------------------------------------
         # --- 5. Generate Excel Report ---
@@ -181,16 +195,15 @@ def submit():
         pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR, logo_path=LOGO_ABSOLUTE_PATH)
         
         # --- 7. Send Email ---
-        # ... (email logic omitted) ...
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')}"
-        body = f"""...""" # Shortened body text
+        body = f"""The site visit report for {visit_info.get('building_name', 'Unknown')} on {visit_info.get('visit_date', 'N/A')} has been generated and is attached."""
         attachments = [excel_path, pdf_path]
         
         email_status, msg = send_outlook_email(subject, body, attachments, email_recipient)
         print("EMAIL_STATUS:", msg)
 
         # ----------------------
-        # 8. Cleanup (TEMPORARILY COMMENTED OUT FOR DEBUGGING)
+        # 8. Cleanup (UNCOMMENT THIS SECTION AFTER SUCCESSFUL TESTING)
         # ----------------------
         # for path in temp_image_paths:
         #     try:
@@ -202,6 +215,7 @@ def submit():
         # ----------------------
         # 9. RESPONSE TO FRONTEND
         # ----------------------
+        # Assuming you have a route like: @site_visit_bp.route('/generated/<path:filename>')
         return jsonify({
             "status": "success",
             "excel_url": url_for('download_generated', filename=excel_filename, _external=True), 
@@ -228,3 +242,12 @@ def submit():
             "status": "error",
             "error": f"Internal server error: Failed to process report. Reason: {type(e).__name__}: {str(e)}"
         }), 500
+
+# =================================================================
+# 4. Route: Download Generated Files (Example)
+# =================================================================
+@site_visit_bp.route('/generated/<path:filename>')
+def download_generated(filename):
+    """Serves the generated files (PDF/Excel) from the GENERATED_DIR."""
+    # Ensure the path is correct and secure
+    return send_from_directory(GENERATED_DIR, filename, as_attachment=True)
