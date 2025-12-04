@@ -55,6 +55,7 @@ def create_signature_table(visit_info):
     sig_story = []
     
     sig_story.append(Spacer(1, 0.3*inch))
+    # NOTE: Section number is updated in build_report_story
     sig_story.append(Paragraph('4. Signatures', styles['BoldTitle'])) 
     sig_story.append(Spacer(1, 0.1*inch)) 
 
@@ -104,7 +105,7 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
         img = Image(file_path)
         img.drawWidth = width
         img.drawHeight = height
-        img.hAlign = 'CENTER' 
+        img.hAlign = 'CENTER' # This aligns the *image* within the ReportLab object, not the table cell.
         return img
     except Exception as e:
         logger.error(f"Image load error for path {file_path}: {e}")
@@ -130,6 +131,8 @@ def create_extra_photo_grid(extra_image_paths):
     photo_elements = []
     for img_path in extra_image_paths:
         photo = get_image_from_path(img_path, PHOTO_WIDTH, PHOTO_HEIGHT, placeholder_text="Image Missing")
+        # Ensure the image itself is aligned right, though table alignment is key
+        photo.hAlign = 'RIGHT' 
         photo_elements.append(photo)
     
     # Arrange photos in a single row table
@@ -142,9 +145,20 @@ def create_extra_photo_grid(extra_image_paths):
         # Ensure we don't have too many columns, just use the number of photos
         col_widths = [COL_WIDTH] * len(photo_elements)
 
-        photo_grid_table = Table([photo_elements], colWidths=col_widths)
+        # Create a table with enough cells to hold all photos and an empty cell to push the row right
+        # This is a common ReportLab trick: use fixed columns and align content right.
+        num_photos = len(photo_elements)
+        num_empty_cells = MAX_COLS - num_photos
+        
+        # Prepare the row data: [empty_cell, ..., empty_cell, photo1, photo2, ...]
+        row_data = ([Paragraph('', styles['Normal'])] * num_empty_cells) + photo_elements
+        
+        # Create a table using the fixed 4-column structure
+        photo_grid_table = Table([row_data], colWidths=[COL_WIDTH] * MAX_COLS)
+        
+        # *** CORRECTION FOR RIGHT ALIGNMENT ***
         photo_grid_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'), # Aligned left to match text
+            ('ALIGN', (0, 0), (-1, -1), 'RIGHT'), # Align all cell contents to the RIGHT
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
             ('RIGHTPADDING', (0, 0), (-1, -1), 0),
@@ -156,16 +170,17 @@ def create_extra_photo_grid(extra_image_paths):
     return story
 
 
-# FUNCTION: Creates the table for user-selected photos/items (Section 2)
+# FUNCTION: Creates the table for user-selected photos/items (Section 3)
 def create_report_photo_items_table(visit_info, processed_items):
     """
-    Creates the 'Report Photo Items' section (Section 2).
+    Creates the 'Report Photo Items' section (Section 3 in the new order).
     Displays the first photo and details for every item, followed immediately 
     by any extra photos for that item.
     """
     
     story = []
-    story.append(Paragraph('2. Report photo items', styles['BoldTitle']))
+    # NOTE: Section number is updated in build_report_story
+    story.append(Paragraph('3. Report photo items', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
     # Column Widths (Must sum to 7.27 * inch)
@@ -182,14 +197,6 @@ def create_report_photo_items_table(visit_info, processed_items):
         if item.get('image_paths') and os.path.exists(item['image_paths'][0]):
             
             # --- BUILD THE SINGLE-ITEM TABLE ---
-            
-            # Header row (only displayed once at the start of the section, or could be per item)
-            # For simplicity and visual continuity, we'll keep the header outside the loop structure 
-            # and just build the table data within the loop. 
-            
-            # Since ReportLab tables are rigid, we can't easily merge cells for the photo grid.
-            # Instead, we create a single table for each item and its first photo/details, 
-            # and then immediately follow it with the photo grid.
             
             # Table Data for this specific item (just one row)
             table_data = [
@@ -310,7 +317,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     # Use A4 width (8.27 inches) minus margins (0.5 + 0.5 = 1.0 inch) gives 7.27 inch for table width
     PAGE_WIDTH = 7.27 * inch 
 
-    # --- 1. Header and Title with Logo ---
+    # --- 1. Header and Title with Logo (NO CHANGE HERE) ---
     title_text = f"Site Visit Report - {visit_info.get('building_name', 'N/A')}"
     title_paragraph = Paragraph(f"<b>{title_text}</b>", styles['BoldTitle']) 
     
@@ -344,7 +351,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(Spacer(1, 0.1*inch))
 
 
-    # --- 2. Visit & Contact Details (Section 1) ---
+    # --- SECTION 1: Visit & Contact Details (NO CHANGE HERE) ---
     story.append(Paragraph('1. Visit & Contact Details', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
@@ -367,12 +374,12 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(details_table)
     story.append(Spacer(1, 0.2*inch))
 
-    # --- SECTION 2: Report Photo Items (Now includes the first photo of all items and extra photos) ---
-    story.extend(create_report_photo_items_table(visit_info, processed_items))
+    # ----------------------------------------------------
+    # *** CORRECTION: SWAP SECTION 2 AND SECTION 3 CONTENT ***
+    # ----------------------------------------------------
 
-
-    # --- SECTION 3: Report Items (Detailed Breakdown) ---
-    story.append(Paragraph('3. Report Items (Detailed Breakdown)', styles['BoldTitle']))
+    # --- SECTION 2 (NEW): Report Items (Detailed Breakdown) ---
+    story.append(Paragraph('2. Report Items (Detailed Breakdown)', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
     if processed_items:
@@ -401,15 +408,17 @@ def build_report_story(visit_info, processed_items, logo_path):
                 ('BOTTOMPADDING', (0, 1), (-1, -1), 6), 
             ]))
             story.append(item_table)
-            
-            # NOTE: All photos are now handled in Section 2, so this section is cleaner.
-            
             story.append(Spacer(1, 0.3 * inch))
 
     else:
         story.append(Paragraph("No report items were added to this visit.", styles['Normal']))
+    
+    story.append(Spacer(1, 0.2*inch)) # Add extra space before next section
 
-    # --- SECTION 4: Signatures ---
+    # --- SECTION 3 (NEW): Report Photo Items ---
+    story.extend(create_report_photo_items_table(visit_info, processed_items))
+
+    # --- SECTION 4: Signatures (NOTE: Section number updated to '4.') ---
     story.extend(create_signature_table(visit_info))
     
     return story
