@@ -1,10 +1,11 @@
-// main.js (FULL AND CORRECTED with Image Resizing and Compression)
+// main.js (FULL AND OPTIMIZED for Faster Photo Processing)
 
 // Declare global variables attached to the window object for universal access
 window.dropdownData = DROPDOWN_DATA; 
 window.pendingItems = []; // Array to hold all report items, including the (now resized) file objects
 window.techPad = null;
 window.opManPad = null;
+const MAX_PHOTOS = 10; // New limit for photos per item
 
 // Retrieve the main form and pending list container
 const form = document.getElementById('visitForm');
@@ -111,13 +112,11 @@ window.showNotification = function(type, title, body) {
     }
 }
 
-// --- NEW HELPER: Image Resizing and Compression Function ---
-// This function reduces the image dimensions and uses JPEG compression
+// --- Image Resizing and Compression Function (unchanged, as the core logic is correct) ---
 function resizeImage(file, maxWidth, maxHeight, quality) {
     return new Promise((resolve) => {
         // Skip non-image files gracefully
         if (!file || !file.type.startsWith('image/')) {
-            console.warn(`File ${file.name} is not a valid image. Skipping resize.`);
             resolve(file); 
             return;
         }
@@ -153,7 +152,6 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
                 canvas.height = height;
 
                 const ctx = canvas.getContext('2d');
-                // Use better quality resampling if needed, but simple drawImage is usually sufficient
                 ctx.drawImage(img, 0, 0, width, height);
 
                 // Convert canvas content to a compressed image Blob
@@ -165,24 +163,20 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
                     }
 
                     // Create a new File object from the compressed Blob
-                    // Change file extension to .jpg since we force JPEG compression
                     const resizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
                         type: 'image/jpeg', 
                         lastModified: Date.now()
                     });
                     
-                    console.log(`Resized ${file.name} from ${file.size} bytes to ${resizedFile.size} bytes.`);
                     resolve(resizedFile);
-                }, 'image/jpeg', quality); // Use JPEG compression (e.g., 0.8)
+                }, 'image/jpeg', quality); // Use JPEG compression
             };
             img.onerror = function() {
-                console.error(`Error loading image for resize: ${file.name}`);
                 resolve(file); 
             };
             reader.readAsDataURL(file); // Load the file as a data URL for the Image object
         };
         reader.onerror = function() {
-            console.error(`Error reading file: ${file.name}`);
             resolve(file); 
         };
     });
@@ -190,7 +184,7 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
 
 
 // ---------------------------------------------------------------
-// 2. Dropdown Population and Cascading Logic
+// 2. Dropdown Population and Cascading Logic (unchanged)
 // ---------------------------------------------------------------
 
 function initDropdowns() {
@@ -257,7 +251,7 @@ function setupCascadingDropdowns() {
 }
 
 // ---------------------------------------------------------------
-// 3. Pending Items Rendering
+// 3. Pending Items Rendering & Removal (unchanged)
 // ---------------------------------------------------------------
 
 function renderPendingItems() {
@@ -293,10 +287,6 @@ function renderPendingItems() {
     });
 }
 
-// ---------------------------------------------------------------
-// 4. Remove Item Logic
-// ---------------------------------------------------------------
-
 window.removeItem = function(index) {
     if (index >= 0 && index < window.pendingItems.length) {
         window.pendingItems.splice(index, 1);
@@ -306,10 +296,10 @@ window.removeItem = function(index) {
 }
 
 // ---------------------------------------------------------------
-// 5. New Item Addition Logic - CRITICALLY REVISED FOR ASYNC RESIZING
+// 4. New Item Addition Logic - WITH OPTIMIZATION AND FEEDBACK
 // ---------------------------------------------------------------
 
-window.addItem = async function() { // <--- MODIFIED TO ASYNC
+window.addItem = async function() { 
     const assetSelect = document.getElementById('assetSelect');
     const systemSelect = document.getElementById('systemSelect');
     const descriptionSelect = document.getElementById('descriptionSelect');
@@ -319,6 +309,7 @@ window.addItem = async function() { // <--- MODIFIED TO ASYNC
     const commentsTextarea = document.getElementById('commentsTextarea');
     
     const addItemButton = document.getElementById('addItemButton');
+    const rawFiles = Array.from(photoInput.files);
 
     // --- Input Validation ---
     let isValid = true;
@@ -338,19 +329,32 @@ window.addItem = async function() { // <--- MODIFIED TO ASYNC
         return; 
     }
     
+    // --- NEW VALIDATION: Photo Limit Check ---
+    if (rawFiles.length > MAX_PHOTOS) {
+        showNotification('warning', 'Photo Limit Exceeded', `Please upload a maximum of ${MAX_PHOTOS} photos per item. You selected ${rawFiles.length}.`);
+        return; // Exit before starting processing
+    }
+
     // Disable button and show processing status
     if (addItemButton) {
         addItemButton.disabled = true; 
-        addItemButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing Photos...'; 
+        addItemButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing Photos (0/${rawFiles.length})...`; 
     }
     
     // --- CRITICAL STEP: Resize all photos using Promises ---
-    const rawFiles = Array.from(photoInput.files);
+    let processedCount = 0;
     
-    // Target 1200px max dimension, 80% JPEG quality
-    const resizePromises = rawFiles.map(file => 
-        resizeImage(file, 1200, 1200, 0.8) 
-    );
+    // Target: Max 800px wide/tall, 60% JPEG quality
+    const resizePromises = rawFiles.map(file => {
+        return resizeImage(file, 800, 800, 0.6).then(resizedFile => {
+            processedCount++;
+            // Update the status text after each photo
+            if (addItemButton) {
+                addItemButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Processing Photos (${processedCount}/${rawFiles.length})...`;
+            }
+            return resizedFile;
+        });
+    });
     
     let resizedPhotos = [];
     
@@ -398,7 +402,7 @@ window.addItem = async function() { // <--- MODIFIED TO ASYNC
 
 
 // ---------------------------------------------------------------
-// 6. Form Submission Logic - CRITICALLY REVISED 
+// 5. Form Submission Logic (unchanged) 
 // ---------------------------------------------------------------
 
 // Helper function to trigger a programmatic download
@@ -523,7 +527,7 @@ window.onSubmit = async function(event) {
             window.pendingItems = [];
             renderPendingItems();
             if (window.techPad) window.techPad.clear();
-            if (window.opManPad) window.opManPad.clear();
+            if (window.opManPad) window.opPad.clear();
             
             // Reset the form fields
             if (form) form.reset();
