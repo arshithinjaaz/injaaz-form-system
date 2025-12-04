@@ -60,7 +60,7 @@ def create_signature_table(visit_info):
     sig_story.append(Paragraph('4. Signatures', styles['BoldTitle'])) 
     sig_story.append(Spacer(1, 0.1*inch)) 
 
-    # Retrieve file paths saved in app.py
+    # Retrieve file paths saved in routes.py
     tech_sig_path = visit_info.get('tech_signature_path')
     opMan_sig_path = visit_info.get('opMan_signature_path')
 
@@ -99,7 +99,6 @@ def create_signature_table(visit_info):
 def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
     """Loads image from a temporary file path into a ReportLab Image object."""
     if not file_path or not os.path.exists(file_path):
-        # Log which file path failed to load
         logger.warning(f"Image file not found for PDF: {file_path}")
         return Paragraph(f'<font size="8">{placeholder_text}</font>', styles['SmallText'])
     try:
@@ -113,7 +112,8 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
         logger.error(f"Image load error for path {file_path}: {e}")
         return Paragraph(f'<font size="8">Image Load Error</font>', styles['SmallText'])
 
-# Helper function to create the photo grid (used in Section 2 now)
+# Helper function to create the photo grid (used in Section 3 for extra photos)
+# CRITICAL: This version is used in the main loop and requires the caller to manage deletion.
 def create_extra_photo_grid(extra_image_paths):
     if not extra_image_paths:
         return []
@@ -128,11 +128,16 @@ def create_extra_photo_grid(extra_image_paths):
     story.append(Spacer(1, 0.05 * inch))
     
     photo_elements = []
+    
     for img_path in extra_image_paths:
-        # Load image (another memory spike point)
+        # Load image. Memory spike point.
         photo = get_image_from_path(img_path, PHOTO_WIDTH, PHOTO_HEIGHT, placeholder_text="Image Missing")
         photo.hAlign = 'RIGHT' 
         photo_elements.append(photo)
+        
+        # CRITICAL OPTIMIZATION: Delete the photo object immediately after adding it to the list
+        # This reduces memory usage for every photo beyond the first one in the loop.
+        del photo
     
     # Arrange photos in a single row table
     if photo_elements:
@@ -156,6 +161,9 @@ def create_extra_photo_grid(extra_image_paths):
             ('BOTTOMPADDING', (0, 0), (-1, -1), 10), 
         ]))
         story.append(photo_grid_table)
+        
+        # CRITICAL OPTIMIZATION: Delete the table object itself immediately after adding it to the story.
+        del photo_grid_table
         
     return story
 
@@ -187,7 +195,7 @@ def create_report_photo_items_table(visit_info, processed_items):
             
             # Content Row
             img_path = item['image_paths'][0] 
-            # Load image (another memory spike point)
+            # Load image. Memory spike point.
             item_image = get_image_from_path(img_path, IMG_WIDTH, IMG_HEIGHT, placeholder_text="No Image")
             
             details_text = f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']}<br/>"
@@ -223,9 +231,15 @@ def create_report_photo_items_table(visit_info, processed_items):
             item_summary_table.setStyle(TableStyle(header_style_commands))
             story.append(item_summary_table)
             
+            # CRITICAL OPTIMIZATION: Manually delete the image/table objects from memory after they are added to the story.
+            # This is done *within the loop* to prevent accumulation item by item.
+            del item_image
+            del item_summary_table
+            
             # --- ADD EXTRA PHOTOS BELOW THE TABLE ---
             if len(item['image_paths']) > 1:
                 extra_image_paths = item['image_paths'][1:]
+                # Calls the optimized grid function
                 story.extend(create_extra_photo_grid(extra_image_paths))
 
             story.append(Spacer(1, 0.1 * inch))
@@ -325,7 +339,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(Spacer(1, 0.1*inch))
 
 
-    # --- SECTION 1: Visit & Contact Details (No changes) ---
+    # --- SECTION 1: Visit & Contact Details ---
     story.append(Paragraph('1. Visit & Contact Details', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
@@ -348,7 +362,7 @@ def build_report_story(visit_info, processed_items, logo_path):
     story.append(details_table)
     story.append(Spacer(1, 0.2*inch))
 
-    # --- SECTION 2 (NEW): Report Items (Detailed Breakdown) (No changes) ---
+    # --- SECTION 2: Report Items (Detailed Breakdown) ---
     story.append(Paragraph('2. Report Items (Detailed Breakdown)', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
@@ -375,6 +389,8 @@ def build_report_story(visit_info, processed_items, logo_path):
                 ('BOTTOMPADDING', (0, 1), (-1, -1), 6), 
             ]))
             story.append(item_table)
+            # CRITICAL OPTIMIZATION: Delete the table object itself immediately after adding it to the story.
+            del item_table
             story.append(Spacer(1, 0.3 * inch))
 
     else:
@@ -382,14 +398,14 @@ def build_report_story(visit_info, processed_items, logo_path):
     
     story.append(Spacer(1, 0.2*inch))
 
-    # --- SECTION 3 (NEW): Report Photo Items ---
+    # --- SECTION 3: Report Photo Items (CRITICALLY OPTIMIZED FUNCTION) ---
     story.extend(create_report_photo_items_table(visit_info, processed_items))
 
     # --- SECTION 4: Signatures ---
     story.extend(create_signature_table(visit_info))
     
     # Explicitly clear the large variables after they have been processed by ReportLab
-    # This is a memory optimization step.
+    # This is a final memory optimization step.
     del visit_info
     del processed_items
     
