@@ -11,6 +11,8 @@ import io # <-- NEW: Import for in-memory handling
 
 # --- Logging Configuration ---
 logger = logging.getLogger(__name__)
+# Set a basic logging level for clarity in logs
+logger.setLevel(logging.INFO)
 
 # --- CONFIGURATION & BRANDING ---
 # Brand Color: #198754 (Dark Green/Teal)
@@ -19,12 +21,17 @@ ACCENT_BG_COLOR = colors.HexColor('#F2FBF8') # Lighter shade for table headers
 GRID_COLOR = colors.HexColor('#CCCCCC')
 
 # NOTE: The logo path must be accessible from where this script runs.
-# We assume 'static/INJAAZ.png' is at the root level relative to the utils folder.
-# Adjusted path relative to the script's location (assuming utils is one level down)
+# Adjusted path to handle the Render deployment issue (absolute path within the container)
+# Assumes structure: /app/module_site_visit/static/INJAAZ.png
 try:
-    LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', 'INJAAZ.png')
+    # Use the absolute path structure reliable for Render deployments
+    # Adjust this path if your project structure on the server is different
+    LOGO_PATH = os.path.join('/app', 'module_site_visit', 'static', 'INJAAZ.png')
+    if not os.path.exists(LOGO_PATH):
+        # Fallback to the original relative path definition
+        LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', 'INJAAZ.png')
 except NameError:
-    # Fallback for environments where __file__ is not defined
+    # Fallback for local environments or if __file__ is undefined
     LOGO_PATH = os.path.join(os.getcwd(), 'static', 'INJAAZ.png')
 
 
@@ -50,7 +57,7 @@ def get_sig_image_from_path(file_path, name):
     """Loads signature from a file path into a ReportLab Image object using an in-memory stream."""
     if file_path and os.path.exists(file_path):
         try:
-            # FIX: Eagerly read the file contents into memory (BytesIO)
+            # Eagerly read the file contents into memory (BytesIO)
             with open(file_path, 'rb') as f:
                 img_data = io.BytesIO(f.read())
                 
@@ -70,7 +77,7 @@ def get_image_from_path(file_path, width, height, placeholder_text="No Photo"):
     if not file_path or not os.path.exists(file_path):
         return Paragraph(f'<font size="8">{placeholder_text}</font>', styles['SmallText'])
     try:
-        # FIX: Eagerly read the file contents into memory (BytesIO)
+        # Eagerly read the file contents into memory (BytesIO)
         with open(file_path, 'rb') as f:
             img_data = io.BytesIO(f.read())
 
@@ -165,8 +172,8 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
     
     # Adjust margins slightly for A4 and custom layout
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
-                            rightMargin=0.5 * inch, leftMargin=0.5 * inch,
-                            topMargin=0.5 * inch, bottomMargin=0.75 * inch)
+                             rightMargin=0.5 * inch, leftMargin=0.5 * inch,
+                             topMargin=0.5 * inch, bottomMargin=0.75 * inch)
                             
     Story = build_report_story(visit_info, processed_items)
     
@@ -187,9 +194,11 @@ def build_report_story(visit_info, processed_items):
     title_paragraph = Paragraph(title_text, styles['BoldTitle'])
 
     logo = Paragraph('', styles['Normal'])
+    
+    # Attempt to load the Logo
     try:
         if os.path.exists(LOGO_PATH):
-            # FIX: Eagerly load logo into memory stream
+            # Eagerly load logo into memory stream
             with open(LOGO_PATH, 'rb') as f:
                 logo_data = io.BytesIO(f.read())
 
@@ -218,10 +227,11 @@ def build_report_story(visit_info, processed_items):
     story.append(Spacer(1, 0.2*inch))
 
 
-    # --- 2. Visit & Contact Details (Based on your template Block 1) ---
+    # --- 2. Visit & Contact Details (Section 1) ---
     story.append(Paragraph('1. Visit & Contact Details', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
+    # Data for the details table
     details_data = [
         [Paragraph('<b>Building Name:</b>', styles['Question']), visit_info.get('building_name', 'N/A'), Paragraph('<b>Date of Visit:</b>', styles['Question']), datetime.now().strftime('%Y-%m-%d')],
         [Paragraph('<b>Site Address:</b>', styles['Question']), visit_info.get('building_address', 'N/A'), Paragraph('<b>Technician:</b>', styles['Question']), visit_info.get('technician_name', 'N/A')],
@@ -242,7 +252,7 @@ def build_report_story(visit_info, processed_items):
     story.append(Spacer(1, 0.2*inch))
 
 
-    # --- 3. Report Items ---
+    # --- 3. Report Items (Section 2) ---
     story.append(Paragraph('2. Report Items', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
@@ -312,7 +322,7 @@ def build_report_story(visit_info, processed_items):
     else:
         story.append(Paragraph("No report items were added to this visit.", styles['Normal']))
 
-    # --- BLOCK 4: Notes and Observation (Used as a general comments block) ---
+    # --- BLOCK 4: General Notes (Section 3) ---
     story.append(Paragraph('3. General Notes', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
 
@@ -328,7 +338,7 @@ def build_report_story(visit_info, processed_items):
     ]))
     story.append(notes_table)
     
-    # --- BLOCK 5: Signatures (Now section 4) ---
+    # --- BLOCK 5: Signatures (Section 4) ---
     story.extend(create_signature_table(visit_info))
     
     return story
