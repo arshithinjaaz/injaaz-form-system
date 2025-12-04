@@ -4,3 +4,4 @@ openpyxl
 reportlab
 pandas
 Pillow
+boto3
