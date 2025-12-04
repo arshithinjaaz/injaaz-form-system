@@ -112,7 +112,7 @@ window.showNotification = function(type, title, body) {
     }
 }
 
-// --- Image Resizing and Compression Function (unchanged, as the core logic is correct) ---
+// --- Image Resizing and Compression Function ---
 function resizeImage(file, maxWidth, maxHeight, quality) {
     return new Promise((resolve) => {
         // Skip non-image files gracefully
@@ -169,7 +169,7 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
                     });
                     
                     resolve(resizedFile);
-                }, 'image/jpeg', quality); // Use JPEG compression
+                }, 'image/jpeg', quality); // Use JPEG compression with specified quality
             };
             img.onerror = function() {
                 resolve(file); 
@@ -184,7 +184,7 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
 
 
 // ---------------------------------------------------------------
-// 2. Dropdown Population and Cascading Logic (unchanged)
+// 2. Dropdown Population and Cascading Logic 
 // ---------------------------------------------------------------
 
 function initDropdowns() {
@@ -251,7 +251,7 @@ function setupCascadingDropdowns() {
 }
 
 // ---------------------------------------------------------------
-// 3. Pending Items Rendering & Removal (unchanged)
+// 3. Pending Items Rendering & Removal 
 // ---------------------------------------------------------------
 
 function renderPendingItems() {
@@ -275,7 +275,7 @@ function renderPendingItems() {
                 <div class="text-muted small">
                     ${item.comments ? `Comment: ${item.comments}` : 'No Comments.'} 
                     (${item.photos.length} Photo${item.photos.length !== 1 ? 's' : ''})
-            </div>
+                </div>
             </div>
             <div class="item-actions">
                 <button type="button" class="btn btn-sm btn-danger" onclick="removeItem(${index})">
@@ -296,7 +296,7 @@ window.removeItem = function(index) {
 }
 
 // ---------------------------------------------------------------
-// 4. New Item Addition Logic - WITH OPTIMIZATION AND FEEDBACK
+// 4. New Item Addition Logic - WITH AGGRESSIVE OPTIMIZATION
 // ---------------------------------------------------------------
 
 window.addItem = async function() { 
@@ -344,9 +344,9 @@ window.addItem = async function() {
     // --- CRITICAL STEP: Resize all photos using Promises ---
     let processedCount = 0;
     
-    // Target: Max 800px wide/tall, 60% JPEG quality
+    // 🔥 OPTIMIZED SETTINGS: Max 600px wide/tall, 40% JPEG quality 🔥
     const resizePromises = rawFiles.map(file => {
-        return resizeImage(file, 800, 800, 0.6).then(resizedFile => {
+        return resizeImage(file, 600, 600, 0.4).then(resizedFile => {
             processedCount++;
             // Update the status text after each photo
             if (addItemButton) {
@@ -402,7 +402,7 @@ window.addItem = async function() {
 
 
 // ---------------------------------------------------------------
-// 5. Form Submission Logic (unchanged) 
+// 5. Form Submission Logic 
 // ---------------------------------------------------------------
 
 // Helper function to trigger a programmatic download
@@ -527,7 +527,7 @@ window.onSubmit = async function(event) {
             window.pendingItems = [];
             renderPendingItems();
             if (window.techPad) window.techPad.clear();
-            if (window.opManPad) window.opPad.clear();
+            if (window.opManPad) window.opManPad.clear(); // Corrected the pad variable name
             
             // Reset the form fields
             if (form) form.reset();
