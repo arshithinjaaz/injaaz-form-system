@@ -4,15 +4,13 @@ import os
 from flask import Flask, send_from_directory, abort, render_template
 
 # 1. Import the Blueprint object for Form 1 (Site Visit Report)
-# Ensure you have 'module_site_visit/routes.py' defining 'site_visit_bp'
+# Ensure 'module_site_visit/routes.py' is completely clean of errors!
 from module_site_visit.routes import site_visit_bp
 
 # 2. Import the Blueprint object for Form 2 (The new Site Assessment Report)
-# This module was created in the previous step ('module_site_assessment/routes.py')
 from module_site_assessment.routes import site_assessment_bp
 
 # 3. Import the Blueprint object for Form 3 (New Site Civil Report)
-# This is the line that registers your new module
 from module_site_civil.routes import site_civil_bp
 
 # --- CONFIGURATION ---
@@ -63,5 +61,3 @@ def download_generated(filename):
 if __name__ == '__main__':
     # When deploying to Render, the host will be set by the environment
     app.run(debug=True, host='0.0.0.0')
-
-#New repo
