@@ -4,4 +4,4 @@ openpyxl
 reportlab
 pandas
 Pillow
-boto3
+boto3==1.42.3
