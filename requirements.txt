@@ -7,3 +7,4 @@ Pillow
 boto3
 requests
 cloudinary
+xlsxwriter
