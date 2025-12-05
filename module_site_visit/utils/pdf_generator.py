@@ -3,29 +3,37 @@ import time
 import logging
 import tempfile # For creating temporary files
 from datetime import datetime
+
+# --- S3 IMPORTS AND CLIENT SETUP ---
+import boto3
+from botocore.exceptions import ClientError
+
+# Configuration from environment variables
+# CRITICAL: Reads AWS_REGION and S3_BUCKET_NAME from your Render environment
+S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+
+try:
+    # Boto3 automatically uses AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from env
+    s3_client_download = boto3.client('s3', region_name=AWS_REGION)
+except ClientError as e:
+    # This will log an error if AWS access is configured incorrectly
+    logging.error(f"S3 Client initialization failed: {e}")
+    s3_client_download = None
+
+# -----------------------------------
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
-# --- Assume you put your S3 client and download helper in a separate file like 's3_utils.py' ---
-# *** YOU MUST REPLACE 'your_s3_module' WITH YOUR ACTUAL MODULE NAME ***
-try:
-    # This import will ONLY work once you define these functions in your server code
-    from your_s3_module import download_s3_file_to_temp, S3_BUCKET_NAME 
-except ImportError:
-    # Fallback/placeholder functions for development until you create the module
-    logging.warning("S3 module not found. Using NO-OP placeholders.")
-    def download_s3_file_to_temp(s3_key):
-        raise NotImplementedError("S3 download function not implemented!")
-    S3_BUCKET_NAME = "INJAAZ_S3_PLACEHOLDER"
-
-# --- Logging Configuration ---
+# --- Logging Configuration (Kept) ---
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# --- CONFIGURATION & BRANDING ---
+# --- CONFIGURATION & BRANDING (Kept) ---
 BRAND_COLOR = colors.HexColor('#198754') 
 ACCENT_BG_COLOR = colors.HexColor('#F2FBF8')
 GRID_COLOR = colors.HexColor('#CCCCCC')
@@ -44,12 +52,52 @@ styles.add(ParagraphStyle(name='Question', fontName='Helvetica-Bold', fontSize=1
 styles.add(ParagraphStyle(name='Answer', fontName='Helvetica', fontSize=10, leading=12))
 styles.add(ParagraphStyle(name='SmallText', fontName='Helvetica', fontSize=8, leading=10))
 
-# --- HELPER FUNCTIONS FOR S3 ACCESS ---
+# =================================================================
+# --- NEW S3 DOWNLOAD IMPLEMENTATION ---
+# This function is now fully self-contained and uses Boto3
+# =================================================================
+
+def download_s3_file_to_temp(s3_key):
+    """
+    Downloads a file from S3 to a temporary local file and returns the path.
+    The caller (get_image_from_s3) is responsible for deleting the temporary file.
+    """
+    if not s3_client_download or not s3_key or not S3_BUCKET_NAME:
+        logger.warning("S3 client not initialized or missing key/bucket name for download.")
+        return None
+        
+    file_path = None
+    try:
+        # Create a named temporary file that won't be deleted immediately
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            file_path = tmp.name
+            
+        # Download the S3 object to the temporary file path
+        s3_client_download.download_file(S3_BUCKET_NAME, s3_key, file_path)
+        
+        logger.info(f"Successfully downloaded {s3_key} to {file_path}")
+        return file_path
+        
+    except ClientError as e:
+        logger.error(f"Error downloading S3 file {s3_key}: {e}")
+        # If an error occurs, clean up the temp file if created
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error during download for {s3_key}: {e}")
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        return None
+
+# =================================================================
+# --- HELPER FUNCTIONS FOR S3 ACCESS (UPDATED) ---
+# The logic inside these functions is correct for temp file handling.
+# =================================================================
 
 def get_sig_image_from_s3(s3_key, name):
     """
     Loads signature image from S3. Requires S3_key as input.
-    The output PDF structure should pass the S3_key instead of file_path.
     """
     if not s3_key:
         return Paragraph(f'Unsigned: {name}', styles['Normal'])
@@ -57,7 +105,7 @@ def get_sig_image_from_s3(s3_key, name):
     temp_file_path = None
     try:
         # 1. Download file to a temporary local path
-        temp_file_path = download_s3_file_to_temp(s3_key)
+        temp_file_path = download_s3_file_to_temp(s3_key) # <-- NOW CALLS THE BOTO3 IMPLEMENTATION
         
         if not temp_file_path or not os.path.exists(temp_file_path):
             return Paragraph(f'Image Fetch Failed: {name}', styles['Normal'])
@@ -86,7 +134,7 @@ def get_image_from_s3(s3_key, width, height, placeholder_text="No Photo"):
     temp_file_path = None
     try:
         # 1. Download file to a temporary local path
-        temp_file_path = download_s3_file_to_temp(s3_key)
+        temp_file_path = download_s3_file_to_temp(s3_key) # <-- NOW CALLS THE BOTO3 IMPLEMENTATION
 
         if not temp_file_path or not os.path.exists(temp_file_path):
             return Paragraph(f'<font size="8">Image Fetch Failed</font>', styles['SmallText'])
@@ -105,26 +153,22 @@ def get_image_from_s3(s3_key, width, height, placeholder_text="No Photo"):
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
-# --- Original structure remains, but calls are updated ---
+# --- The rest of the code is unchanged as it correctly uses the new S3 functions ---
 
 def create_signature_table(visit_info):
-    """Creates the signature block."""
+# ... unchanged ...
     sig_story = []
     
     sig_story.append(Spacer(1, 0.3*inch))
     sig_story.append(Paragraph('4. Signatures', styles['BoldTitle'])) 
     sig_story.append(Spacer(1, 0.1*inch)) 
 
-    # NOTE: These paths now need to be S3 keys (e.g., 'signatures/tech_123.png') 
-    # and must be retrieved from the database/report data in app.py
     tech_sig_key = visit_info.get('tech_signature_key')
     opMan_sig_key = visit_info.get('opMan_signature_key')
 
-    # UPDATED: Use the S3 image loading functions
     tech_sig = get_sig_image_from_s3(tech_sig_key, 'Technician')
     opMan_sig = get_sig_image_from_s3(opMan_sig_key, 'Operation Manager')
 
-    # ... rest of create_signature_table is unchanged ...
     # Get names for display
     tech_name = visit_info.get('technician_name', 'N/A')
     opMan_name = visit_info.get('opMan_name', 'N/A')
@@ -197,6 +241,7 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
 
 
 def build_report_story(visit_info, processed_items):
+# ... unchanged ...
     story = []
     
     # --- 1. Header and Title with Logo (Unchanged) ---
