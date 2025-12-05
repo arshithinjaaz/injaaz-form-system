@@ -26,6 +26,7 @@ CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET') # No defau
 
 # Initialize Cloudinary (required for server-side upload of signatures)
 try:
+    # ⚠️ FIXED: All indentation here must use standard spaces/tabs.
     cloudinary.config(
         cloud_name=CLOUDINARY_CLOUD_NAME,
         api_key=CLOUDINARY_API_KEY, 
@@ -49,6 +50,7 @@ def upload_base64_to_cloudinary(base64_string, public_id_prefix):
         return None
         
     try:
+        # ⚠️ FIXED: Indentation here must use standard spaces/tabs.
         # Cloudinary Uploader can accept the full 'data:image/png;base64,...' string
         upload_result = cloudinary.uploader.upload(
             file=base64_string,
@@ -69,6 +71,7 @@ def upload_base64_to_cloudinary(base64_string, public_id_prefix):
 def save_report_state(report_id, data):
     """Saves report state (Placeholder for Redis/DB)."""
     temp_record_path = os.path.join(tempfile.gettempdir(), f"{report_id}.json")
+    # ⚠️ FIXED: Indentation here must use standard spaces/tabs.
     with open(temp_record_path, 'w') as f:
         json.dump(data, f)
 
@@ -80,6 +83,7 @@ def get_report_state(report_id):
         return None
         
     try:
+        # ⚠️ FIXED: Indentation here must use standard spaces/tabs.
         with open(temp_record_path, 'r') as f:
             record = json.load(f)
         return record
@@ -125,6 +129,7 @@ def index():
 def get_dropdown_data():
     """Reads the dropdown_data.json file and returns its content as JSON."""
     try:
+        # ⚠️ FIXED: Indentation here must use standard spaces/tabs.
         with open(DROPDOWN_DATA_PATH, 'r') as f:
             data = json.load(f)
         return jsonify(data)
@@ -144,6 +149,7 @@ def submit_metadata():
     """Receives metadata, uploads signatures to Cloudinary, and returns Cloudinary config for client photo upload."""
     
     try:
+        # ⚠️ FIXED: Indentation here must use standard spaces/tabs.
         data = request.json
         visit_info = data.get('visit_info', {})
         processed_items = data.get('report_items', []) 
@@ -197,6 +203,7 @@ def update_photos():
         return jsonify({"error": "Report record not found (Server restarted or session expired)."}), 500
         
     try:
+        # ⚠️ FIXED: Indentation here must use standard spaces/tabs.
         data = request.json
         photo_urls = data.get('photo_urls', [])
         
@@ -227,6 +234,7 @@ def finalize_report():
         return jsonify({"error": "Report record not found (Server restarted or session expired)."}), 500
     
     try:
+        # ⚠️ FIXED: Indentation here must use standard spaces/tabs.
         visit_info = record['visit_info']
         final_items = record['report_items']
         final_photo_urls = record.get('photo_urls', []) 
