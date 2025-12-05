@@ -12,28 +12,33 @@ import cloudinary.uploader
 import cloudinary.api 
 
 # --- CORE IMPORTS ---
-# REMOVED: from .s3_utils_config import decode_base64_to_s3 
-
+# Assuming these are relative imports from the module's sub-directories
 from .utils.email_sender import send_outlook_email 
 from .utils.excel_writer import create_report_workbook 
 from .utils.pdf_generator import generate_visit_pdf 
 
-# --- CONFIGURATION (Added for Cloudinary access) ---
-# NOTE: Cloudinary configuration can be set using a single environment variable:
-# CLOUDINARY_URL=cloudinary://<API_KEY>:<API_SECRET>@<CLOUD_NAME>
-CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME')
-CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET')
+# --- CONFIGURATION (Loaded from environment variables with provided defaults) ---
+# NOTE: Replace the default values with environment variables in production!
+CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dv7kljagk') 
+CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '863137649681362') 
+CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '2T8gWf0H--OH2T55rcYS9qXm9Bg') 
+CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET') # No default set here
 
-# Initialize Cloudinary (required for server-side upload)
-cloudinary.config(
-    cloud_name=CLOUDINARY_CLOUD_NAME,
-    # Assumes you set CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET in environment vars
-    api_key=os.environ.get('CLOUDINARY_API_KEY'), 
-    api_secret=os.environ.get('CLOUDINARY_API_SECRET')
-)
+# Initialize Cloudinary (required for server-side upload of signatures)
+try:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY, 
+        api_secret=CLOUDINARY_API_SECRET
+    )
+    print("Cloudinary configuration successful.")
+except Exception as e:
+    print(f"CRITICAL ERROR: Cloudinary initialization failed: {e}")
+    pass
+
 
 # =================================================================
-# --- NEW CLOUDINARY SIGNATURE UPLOAD UTILITY ---
+# --- CLOUDINARY SIGNATURE UPLOAD UTILITY ---
 # =================================================================
 
 def upload_base64_to_cloudinary(base64_string, public_id_prefix):
@@ -58,9 +63,7 @@ def upload_base64_to_cloudinary(base64_string, public_id_prefix):
         return None
 
 # =================================================================
-# --- STABILITY FIX: REDIS/DB PLACEHOLDER (Unchanged) ---
-# (Keep functions: save_report_state, get_report_state)
-# ... [Original save_report_state and get_report_state functions here] ...
+# --- TEMPORARY STATE MANAGEMENT (Placeholder) ---
 # =================================================================
 
 def save_report_state(report_id, data):
@@ -86,8 +89,7 @@ def get_report_state(report_id):
             os.remove(temp_record_path)
 
 # =================================================================
-# --- PATH AND BLUEPRINT CONFIGURATION (Unchanged) ---
-# ... [Original BLUEPRINT_DIR, BASE_DIR, TEMPLATE_ABSOLUTE_PATH, etc. here] ...
+# --- PATH AND BLUEPRINT CONFIGURATION ---
 # =================================================================
 
 BLUEPRINT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -110,8 +112,7 @@ site_visit_bp = Blueprint(
 
 
 # =================================================================
-# 1 & 2. Main Form Page & Dropdown Data (Unchanged)
-# ... [Original index and get_dropdown_data routes here] ...
+# 1 & 2. Main Form Page & Dropdown Data
 # =================================================================
 
 @site_visit_bp.route('/form') 
@@ -136,7 +137,7 @@ def get_dropdown_data():
 
 
 # =================================================================
-# 3. ROUTE: PHASE 1 - SUBMIT METADATA (SIGNATURES NOW UPLOADED TO CLOUDINARY)
+# 3. ROUTE: PHASE 1 - SUBMIT METADATA (Uploads signatures to Cloudinary)
 # =================================================================
 @site_visit_bp.route('/api/submit/metadata', methods=['POST'])
 def submit_metadata():
@@ -148,12 +149,11 @@ def submit_metadata():
         processed_items = data.get('report_items', []) 
         signatures = data.get('signatures', {})
         
-        # --- 3A. Process Signatures (NEW: Using Cloudinary upload) ---
+        # --- 3A. Process Signatures (Using Cloudinary upload) ---
         tech_sig_url = upload_base64_to_cloudinary(signatures.get('tech_signature'), 'tech_sig')
         opMan_sig_url = upload_base64_to_cloudinary(signatures.get('opMan_signature'), 'opman_sig')
         
-        # Store signature URLs (NOT S3 keys)
-        # RENAMED KEY: The utility functions must now look for these URL keys
+        # Store signature URLs
         visit_info['tech_signature_url'] = tech_sig_url
         visit_info['opMan_signature_url'] = opMan_sig_url
         
@@ -167,10 +167,11 @@ def submit_metadata():
             'photo_urls': [] 
         })
 
-        # --- 3D. Return Cloudinary Configuration ---
+        # --- 3D. Return Cloudinary Configuration for the FRONT-END (client-side upload) ---
         return jsonify({
             "status": "success",
             "visit_id": report_id, 
+            # These are used by main.js for direct client-side photo upload
             "cloudinary_cloud_name": CLOUDINARY_CLOUD_NAME,
             "cloudinary_upload_preset": CLOUDINARY_UPLOAD_PRESET,
         })
@@ -182,8 +183,7 @@ def submit_metadata():
 
 
 # =================================================================
-# 4. ROUTE: PHASE 2 - RECEIVE FINAL PHOTO URLS (Unchanged)
-# ... [Original update_photos route here] ...
+# 4. ROUTE: PHASE 2 - RECEIVE FINAL PHOTO URLS (From client direct upload)
 # =================================================================
 @site_visit_bp.route('/api/submit/update-photos', methods=['POST'])
 def update_photos():
@@ -211,8 +211,7 @@ def update_photos():
 
 
 # =================================================================
-# 5. ROUTE: PHASE 3 - FINALIZE REPORT (Data structure UNCHANGED, now all URLs)
-# ... [Original finalize_report route here] ...
+# 5. ROUTE: PHASE 3 - FINALIZE REPORT (Generates PDF/Excel)
 # =================================================================
 @site_visit_bp.route('/api/submit/finalize', methods=['GET'])
 def finalize_report():
@@ -233,7 +232,7 @@ def finalize_report():
         final_photo_urls = record.get('photo_urls', []) 
         email_recipient = visit_info.get('email')
         
-        # --- 2. Map Cloudinary URLs back to Items (Unchanged) ---
+        # --- 2. Map Cloudinary URLs back to Items ---
         url_map = {}
         for url_data in final_photo_urls:
             key = (url_data['item_index'], url_data['photo_index'])
@@ -257,7 +256,9 @@ def finalize_report():
         # -----------------------------------------------------------------
         os.makedirs(GENERATED_DIR, exist_ok=True) 
 
+        # This requires xlsxwriter and openpyxl
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
+        # This requires reportlab and Pillow
         pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
         
         # --- 4. Send Email ---
@@ -285,8 +286,7 @@ def finalize_report():
 
 
 # =================================================================
-# 6. Route: Download Generated Files (Unchanged)
-# ... [Original download_generated route here] ...
+# 6. Route: Download Generated Files
 # =================================================================
 @site_visit_bp.route('/generated/<path:filename>')
 def download_generated(filename):

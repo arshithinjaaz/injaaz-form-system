@@ -1,4 +1,4 @@
-// main.js (UPDATED FOR CLOUDINARY DIRECT UPLOAD)
+// main.js (FULLY UPDATED FOR CLOUDINARY DIRECT UPLOAD)
 
 // Declare global variables attached to the window object for universal access
 window.dropdownData = DROPDOWN_DATA; 
@@ -7,17 +7,13 @@ window.techPad = null;
 window.opManPad = null;
 const MAX_PHOTOS = 10; // Limit for photos per item
 
-// --- NEW GLOBAL CLOUDINARY CONFIGURATION ---
-let CLOUDINARY_CLOUD_NAME = '';
-let CLOUDINARY_UPLOAD_PRESET = '';
-
 // Retrieve the main form and pending list container
 const form = document.getElementById('visitForm');
 const pendingItemsList = document.getElementById('pendingItemsList');
 
 
 // ---------------------------------------------------------------
-// 1. Initialization, Data Loading, and Utility Functions (UNMODIFIED)
+// 1. Initialization, Data Loading, and Utility Functions
 // ---------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -66,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Helper function to show a custom modal notification (UNMODIFIED)
 window.showNotification = function(type, title, body) {
+    // ... (Your showNotification implementation goes here, unchanged) ...
     const modalElement = document.getElementById('customAlertModal');
     const titleElement = document.getElementById('customAlertTitle');
     const bodyElement = document.getElementById('customAlertBody');
@@ -119,6 +116,7 @@ window.showNotification = function(type, title, body) {
 // --- Image Resizing and Compression Function (UNMODIFIED) ---
 function resizeImage(file, maxWidth, maxHeight, quality) {
     return new Promise((resolve) => {
+        // ... (Your resizeImage implementation goes here, unchanged) ...
         // Skip non-image files gracefully
         if (!file || !file.type.startsWith('image/')) {
             resolve(file); 
@@ -192,6 +190,7 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
 // ---------------------------------------------------------------
 
 function initDropdowns() {
+    // ... (Your initDropdowns implementation goes here, unchanged) ...
     const assetSelect = document.getElementById('assetSelect');
     
     assetSelect.innerHTML = '<option value="" selected disabled>Select Asset</option>';
@@ -205,6 +204,7 @@ function initDropdowns() {
 }
 
 function setupCascadingDropdowns() {
+    // ... (Your setupCascadingDropdowns implementation goes here, unchanged) ...
     const assetSelect = document.getElementById('assetSelect');
     const systemSelect = document.getElementById('systemSelect');
     const descriptionSelect = document.getElementById('descriptionSelect');
@@ -259,6 +259,7 @@ function setupCascadingDropdowns() {
 // ---------------------------------------------------------------
 
 function renderPendingItems() {
+    // ... (Your renderPendingItems implementation goes here, unchanged) ...
     if (!pendingItemsList) return;
     
     pendingItemsList.innerHTML = '';
@@ -292,6 +293,7 @@ function renderPendingItems() {
 }
 
 window.removeItem = function(index) {
+    // ... (Your removeItem implementation goes here, unchanged) ...
     if (index >= 0 && index < window.pendingItems.length) {
         window.pendingItems.splice(index, 1);
         renderPendingItems();
@@ -304,6 +306,7 @@ window.removeItem = function(index) {
 // ---------------------------------------------------------------
 
 window.addItem = async function() { 
+    // ... (Your addItem implementation goes here, unchanged) ...
     const assetSelect = document.getElementById('assetSelect');
     const systemSelect = document.getElementById('systemSelect');
     const descriptionSelect = document.getElementById('descriptionSelect');
@@ -423,19 +426,26 @@ const triggerDownload = (url) => {
 /**
  * PHASE 2: Uploads photos directly to Cloudinary and sends the final URLs to the server.
  * @param {string} visitId - The report ID received from the server.
+ * @param {string} cloudName - The Cloudinary Cloud Name.
+ * @param {string} uploadPreset - The Cloudinary Upload Preset.
  */
-async function uploadPhotosToCloudinary(visitId) {
+async function uploadPhotosToCloudinary(visitId, cloudName, uploadPreset) {
     const uploadPromises = [];
     const finalPhotoUrls = []; 
     let successfulUploads = 0;
     const allPhotos = window.pendingItems.flatMap(item => item.photos).filter(f => f && f.type.startsWith('image/'));
     const totalPhotos = allPhotos.length;
 
+    if (totalPhotos === 0) {
+        // Handle case with no photos gracefully
+        console.log("No photos to upload. Skipping Phase 2 upload.");
+        return;
+    }
+
     const statusText = document.getElementById('status'); 
     statusText.textContent = `Uploading 0/${totalPhotos} photos directly to Cloudinary...`;
 
     // Map the resized File objects to their original report item index and photo index
-    let photoIndexCounter = 0;
     window.pendingItems.forEach((item, item_index) => {
         item.photos.forEach((fileToUpload, photo_index) => {
             
@@ -446,16 +456,22 @@ async function uploadPhotosToCloudinary(visitId) {
                 // 1. Create the Cloudinary Upload Data
                 const formData = new FormData();
                 formData.append('file', fileToUpload);
-                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                formData.append('upload_preset', uploadPreset); 
                 
                 // Construct the Cloudinary API URL
-                const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+                const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`; 
 
                 fetch(CLOUDINARY_URL, {
                     method: 'POST',
                     body: formData,
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        // Throw an error for non-200 status codes (e.g., 400, 500)
+                        throw new Error(`Cloudinary API responded with status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(uploadResult => {
                     if (uploadResult.secure_url) {
                         // Success: Save the permanent image URL and index info
@@ -465,18 +481,16 @@ async function uploadPhotosToCloudinary(visitId) {
                             photo_url: uploadResult.secure_url, 
                         });
                         successfulUploads++;
-                        photoIndexCounter++;
                         statusText.textContent = `Uploading ${successfulUploads}/${totalPhotos} photos directly to Cloudinary...`;
                         resolve(uploadResult.secure_url);
                     } else {
-                        // Cloudinary returns a non-200 or an error object
-                        const errorMessage = uploadResult.error ? uploadResult.error.message : 'Unknown Cloudinary error';
+                        // Cloudinary returns an error object (e.g., bad signature)
+                        const errorMessage = uploadResult.error ? uploadResult.error.message : 'Unknown Cloudinary API error';
                         throw new Error(`Cloudinary upload failed: ${errorMessage}`);
                     }
                 })
                 .catch(error => {
                     console.error("Cloudinary Upload Error:", error);
-                    showNotification('error', 'Photo Upload Failed', `A photo upload failed. See console for details: ${error.message}`);
                     reject(error); // Rejecting the promise stops Promise.all
                 });
             });
@@ -504,7 +518,6 @@ async function uploadPhotosToCloudinary(visitId) {
     }
 }
 
-// **REPLACED window.onSubmit** (Modified Phase 1 & 2)
 window.onSubmit = async function(event) {
     event.preventDefault(); 
 
@@ -520,7 +533,7 @@ window.onSubmit = async function(event) {
     if (alertDiv) alertDiv.className = 'alert d-none';
     if (statusText) statusText.textContent = 'Preparing submission...';
 
-    // --- 1. Collect Metadata and Signatures (UNCHANGED) ---
+    // --- 1. Collect Metadata and Signatures ---
     const formData = new FormData(form); 
     const visitInfo = {};
     formData.forEach((value, key) => {
@@ -537,7 +550,6 @@ window.onSubmit = async function(event) {
     
     // --- Prepare Metadata Payload (Without File Objects) ---
     const metadataItems = window.pendingItems.map(item => {
-        // Just send the item details and photo count.
         const { photos, ...itemDetails } = item; 
         itemDetails.photo_count = item.photos.length; 
         return itemDetails;
@@ -552,7 +564,7 @@ window.onSubmit = async function(event) {
         }
     };
     
-    // --- 2. Validation (UNCHANGED) ---
+    // --- 2. Validation ---
     const technicianName = payloadData.visit_info.technician_name;
     if (!technicianName || !techSignatureData || techSignatureData.length < 100 || payloadData.report_items.length === 0) {
         showNotification('error', 'Submission Failed', 'Please ensure Name, Signature, and at least one Report Item are present.');
@@ -578,12 +590,16 @@ window.onSubmit = async function(event) {
         }
         
         // --- CRITICAL: Get Cloudinary details from server ---
-        CLOUDINARY_CLOUD_NAME = metadataResult.cloudinary_cloud_name;
-        CLOUDINARY_UPLOAD_PRESET = metadataResult.cloudinary_upload_preset;
+        const CLOUDINARY_CLOUD_NAME = metadataResult.cloudinary_cloud_name;
+        const CLOUDINARY_UPLOAD_PRESET = metadataResult.cloudinary_upload_preset;
         visitId = metadataResult.visit_id;
 
+        if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+             throw new Error("Missing Cloudinary configuration from server. Check server environment variables.");
+        }
+
         // --- 4. PHASE 2: Upload Photos Directly to CLOUDINARY & Save URLs to Server ---
-        await uploadPhotosToCloudinary(visitId);
+        await uploadPhotosToCloudinary(visitId, CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET);
 
         // --- 5. PHASE 3: Finalize Report & Generate PDF on Server ---
         statusText.textContent = 'All photos uploaded. Finalizing report and generating documents...';
