@@ -6,44 +6,71 @@ import tempfile
 from datetime import datetime
 from flask import Blueprint, render_template, jsonify, request, url_for, send_from_directory
 
-# =================================================================
-# --- 1. CORE IMPORTS ---
-# =================================================================
+# NEW: Import the Cloudinary SDK
+import cloudinary
+import cloudinary.uploader 
+import cloudinary.api 
 
-# --- 1. CORE IMPORTS ---
+# --- CORE IMPORTS ---
+# REMOVED: from .s3_utils_config import decode_base64_to_s3 
 
-# ...
-# The S3 utility functions are now in a file named s3_utils_config.py
-from .s3_utils_config import ( 
-    generate_presigned_put_url,
-    decode_base64_to_s3
-)
-# ...
-
-
-# IMPORTANT: The following utility functions MUST be defined in 'utils/'
 from .utils.email_sender import send_outlook_email 
 from .utils.excel_writer import create_report_workbook 
 from .utils.pdf_generator import generate_visit_pdf 
 
+# --- CONFIGURATION (Added for Cloudinary access) ---
+# NOTE: Cloudinary configuration can be set using a single environment variable:
+# CLOUDINARY_URL=cloudinary://<API_KEY>:<API_SECRET>@<CLOUD_NAME>
+CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME')
+CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET')
+
+# Initialize Cloudinary (required for server-side upload)
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    # Assumes you set CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET in environment vars
+    api_key=os.environ.get('CLOUDINARY_API_KEY'), 
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET')
+)
+
 # =================================================================
-# --- 🔴 STABILITY FIX: REDIS/DB PLACEHOLDER ---
-# This simulates using a key/value store (like Redis) for temporary 
-# state between API calls (e.g., while photos are uploaded to S3).
-# It uses the temporary file system (os.path.join(tempfile.gettempdir())) 
-# which is NOT production safe, but works for the current placeholder logic.
+# --- NEW CLOUDINARY SIGNATURE UPLOAD UTILITY ---
+# =================================================================
+
+def upload_base64_to_cloudinary(base64_string, public_id_prefix):
+    """
+    Uploads a base64 string (signature) directly to Cloudinary and returns the secure URL.
+    """
+    if not base64_string:
+        return None
+        
+    try:
+        # Cloudinary Uploader can accept the full 'data:image/png;base64,...' string
+        upload_result = cloudinary.uploader.upload(
+            file=base64_string,
+            folder="signatures",
+            public_id=f"{public_id_prefix}_{int(time.time())}"
+        )
+        # Return the secure permanent URL
+        return upload_result.get('secure_url')
+        
+    except Exception as e:
+        print(f"ERROR: Cloudinary signature upload failed for {public_id_prefix}: {e}")
+        return None
+
+# =================================================================
+# --- STABILITY FIX: REDIS/DB PLACEHOLDER (Unchanged) ---
+# (Keep functions: save_report_state, get_report_state)
+# ... [Original save_report_state and get_report_state functions here] ...
 # =================================================================
 
 def save_report_state(report_id, data):
     """Saves report state (Placeholder for Redis/DB)."""
-    # NOTE: DANGEROUS! Replace with redis_client.setex(report_id, 3600, json.dumps(data))
     temp_record_path = os.path.join(tempfile.gettempdir(), f"{report_id}.json")
     with open(temp_record_path, 'w') as f:
         json.dump(data, f)
 
 def get_report_state(report_id):
     """Retrieves and deletes report state (Placeholder for Redis/DB)."""
-    # NOTE: DANGEROUS! Replace with data = redis_client.get(report_id); redis_client.delete(report_id)
     temp_record_path = os.path.join(tempfile.gettempdir(), f"{report_id}.json")
     
     if not os.path.exists(temp_record_path):
@@ -57,9 +84,10 @@ def get_report_state(report_id):
         # Simulate cleanup after reading (like Redis delete)
         if os.path.exists(temp_record_path):
             os.remove(temp_record_path)
-            
+
 # =================================================================
-# --- PATH AND BLUEPRINT CONFIGURATION ---
+# --- PATH AND BLUEPRINT CONFIGURATION (Unchanged) ---
+# ... [Original BLUEPRINT_DIR, BASE_DIR, TEMPLATE_ABSOLUTE_PATH, etc. here] ...
 # =================================================================
 
 BLUEPRINT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -80,18 +108,18 @@ site_visit_bp = Blueprint(
     static_folder='static'
 )
 
+
 # =================================================================
-# 1. Route: Main Form Page
+# 1 & 2. Main Form Page & Dropdown Data (Unchanged)
+# ... [Original index and get_dropdown_data routes here] ...
 # =================================================================
+
 @site_visit_bp.route('/form') 
 def index():
     """Renders the main site visit form template (site_visit_form.html)."""
     return render_template('site_visit_form.html') 
 
 
-# =================================================================
-# 2. Route: Dropdown Data Endpoint
-# =================================================================
 @site_visit_bp.route('/dropdowns')
 def get_dropdown_data():
     """Reads the dropdown_data.json file and returns its content as JSON."""
@@ -108,12 +136,11 @@ def get_dropdown_data():
 
 
 # =================================================================
-# 3. ROUTE: PHASE 1 - SUBMIT METADATA & GET S3 LINKS
-# Receives form metadata, processes signatures, saves state, and returns S3 links.
+# 3. ROUTE: PHASE 1 - SUBMIT METADATA (SIGNATURES NOW UPLOADED TO CLOUDINARY)
 # =================================================================
 @site_visit_bp.route('/api/submit/metadata', methods=['POST'])
 def submit_metadata():
-    """Receives metadata, uploads signatures, and generates S3 upload links for photos."""
+    """Receives metadata, uploads signatures to Cloudinary, and returns Cloudinary config for client photo upload."""
     
     try:
         data = request.json
@@ -121,48 +148,31 @@ def submit_metadata():
         processed_items = data.get('report_items', []) 
         signatures = data.get('signatures', {})
         
-        # --- 3A. Process Signatures (Using s3_utils.decode_base64_to_s3) ---
-        # This function should convert the base64 string to a file and upload it to S3, returning the key.
-        tech_sig_key = decode_base64_to_s3(signatures.get('tech_signature'), 'tech_sig')
-        opMan_sig_key = decode_base64_to_s3(signatures.get('opMan_signature'), 'opman_sig')
+        # --- 3A. Process Signatures (NEW: Using Cloudinary upload) ---
+        tech_sig_url = upload_base64_to_cloudinary(signatures.get('tech_signature'), 'tech_sig')
+        opMan_sig_url = upload_base64_to_cloudinary(signatures.get('opMan_signature'), 'opman_sig')
         
-        # Store S3 keys instead of local paths
-        visit_info['tech_signature_key'] = tech_sig_key
-        visit_info['opMan_signature_key'] = opMan_sig_key
+        # Store signature URLs (NOT S3 keys)
+        # RENAMED KEY: The utility functions must now look for these URL keys
+        visit_info['tech_signature_url'] = tech_sig_url
+        visit_info['opMan_signature_url'] = opMan_sig_url
         
-        # --- 3B. Generate S3 Pre-Signed URLs for Photos (Using s3_utils.generate_presigned_put_url) ---
-        signed_urls = []
+        # --- 3B. Setup Report ID ---
         report_id = f"report-{int(time.time())}" 
         
-        for item_index, item in enumerate(processed_items):
-            for photo_index in range(item.get('photo_count', 0)):
-                file_extension = '.jpg' 
-                # This function returns the URL for the client to upload to, and the S3 key.
-                url, s3_key = generate_presigned_put_url(file_extension)
-                
-                if url and s3_key:
-                    signed_urls.append({
-                        'item_index': item_index,
-                        'photo_index': photo_index,
-                        'url': url,
-                        's3_key': s3_key,
-                        'asset': item.get('asset'),
-                        'description': item.get('description'),
-                        'visit_info': visit_info 
-                    })
-                    
-        # --- 3C. Temporary/Shared Storage (SAVES STATE via PLACEHOLDER) ---
+        # --- 3C. Temporary/Shared Storage (SAVES INITIAL STATE) ---
         save_report_state(report_id, {
             'visit_info': visit_info,
             'report_items': processed_items,
-            'signed_urls_data': signed_urls
+            'photo_urls': [] 
         })
 
-
+        # --- 3D. Return Cloudinary Configuration ---
         return jsonify({
             "status": "success",
             "visit_id": report_id, 
-            "signed_urls": signed_urls
+            "cloudinary_cloud_name": CLOUDINARY_CLOUD_NAME,
+            "cloudinary_upload_preset": CLOUDINARY_UPLOAD_PRESET,
         })
 
     except Exception as e:
@@ -172,18 +182,46 @@ def submit_metadata():
 
 
 # =================================================================
-# 4. ROUTE: PHASE 3 - FINALIZE REPORT & GENERATE PDF
-# Finalizes report generation once client confirms all files are uploaded.
+# 4. ROUTE: PHASE 2 - RECEIVE FINAL PHOTO URLS (Unchanged)
+# ... [Original update_photos route here] ...
+# =================================================================
+@site_visit_bp.route('/api/submit/update-photos', methods=['POST'])
+def update_photos():
+    """Receives the final Cloudinary URLs and updates the server state."""
+    report_id = request.args.get('visit_id')
+    if not report_id:
+        return jsonify({"error": "Missing visit_id"}), 400
+
+    record = get_report_state(report_id)
+    if not record:
+        return jsonify({"error": "Report record not found (Server restarted or session expired)."}), 500
+        
+    try:
+        data = request.json
+        photo_urls = data.get('photo_urls', [])
+        
+        record['photo_urls'] = photo_urls
+        save_report_state(report_id, record) 
+        
+        return jsonify({"status": "success"})
+    except Exception as e:
+        error_details = traceback.format_exc()
+        print(f"ERROR (Update Photos): {error_details}")
+        return jsonify({"error": f"Failed to update photo URLs: {str(e)}"}), 500
+
+
+# =================================================================
+# 5. ROUTE: PHASE 3 - FINALIZE REPORT (Data structure UNCHANGED, now all URLs)
+# ... [Original finalize_report route here] ...
 # =================================================================
 @site_visit_bp.route('/api/submit/finalize', methods=['GET'])
 def finalize_report():
-    """Triggers PDF and Excel generation after client confirms S3 uploads are complete."""
+    """Triggers report generation after client confirms uploads are complete."""
     
     report_id = request.args.get('visit_id')
     if not report_id:
         return jsonify({"error": "Missing visit_id parameter for finalization."}), 400
 
-    # --- 1. Retrieve Stored Record (GETS STATE via PLACEHOLDER) ---
     record = get_report_state(report_id)
     
     if not record:
@@ -192,46 +230,47 @@ def finalize_report():
     try:
         visit_info = record['visit_info']
         final_items = record['report_items']
-        signed_urls_data = record['signed_urls_data']
+        final_photo_urls = record.get('photo_urls', []) 
         email_recipient = visit_info.get('email')
         
-        # --- 2. Map S3 Keys back to Items (Reconstruct data structure) ---
-        s3_key_map = {}
-        for url_data in signed_urls_data:
+        # --- 2. Map Cloudinary URLs back to Items (Unchanged) ---
+        url_map = {}
+        for url_data in final_photo_urls:
             key = (url_data['item_index'], url_data['photo_index'])
-            s3_key_map[key] = url_data['s3_key']
+            url_map[key] = url_data['photo_url'] 
 
         for item_index, item in enumerate(final_items):
-            image_keys = []
+            image_urls = []
             for photo_index in range(item.get('photo_count', 0)):
                 key = (item_index, photo_index)
-                s3_key = s3_key_map.get(key)
-                if s3_key:
-                    image_keys.append(s3_key)
+                photo_url = url_map.get(key)
+                if photo_url:
+                    image_urls.append(photo_url)
                 else:
-                    print(f"WARNING: Missing S3 key for item {item_index}, photo {photo_index}")
+                    print(f"WARNING: Missing photo URL for item {item_index}, photo {photo_index}. URL map key: {key}")
             
-            item['image_keys'] = image_keys 
+            item['image_urls'] = image_urls 
+            item.pop('photo_count', None)
         
         # -----------------------------------------------------------------
-        # --- 3. Generate Reports (Calls utility functions) ---
-        # These utilities must handle fetching files from S3 using the image_keys.
+        # --- 3. Generate Reports ---
         # -----------------------------------------------------------------
+        os.makedirs(GENERATED_DIR, exist_ok=True) 
+
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
         pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
         
-        # --- 4. Send Email (Calls utility function) ---
+        # --- 4. Send Email ---
         subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')} - {datetime.now().strftime('%Y-%m-%d')}"
         body = f"""The site visit report for {visit_info.get('building_name', 'Unknown')} on {datetime.now().strftime('%Y-%m-%d')} has been generated and is attached."""
         
         attachments = [p for p in [excel_path, pdf_path] if p and os.path.exists(p)]
         email_status, msg = send_outlook_email(subject, body, attachments, email_recipient)
         print("EMAIL_STATUS:", msg)
-        
+
         # 5. SUCCESS RESPONSE TO FRONTEND
         return jsonify({
             "status": "success",
-            # Use url_for to generate the full download link
             "excel_url": url_for('site_visit_bp.download_generated', filename=excel_filename, _external=True), 
             "pdf_url": url_for('site_visit_bp.download_generated', filename=pdf_filename, _external=True)
         })
@@ -246,10 +285,10 @@ def finalize_report():
 
 
 # =================================================================
-# 5. Route: Download Generated Files
+# 6. Route: Download Generated Files (Unchanged)
+# ... [Original download_generated route here] ...
 # =================================================================
 @site_visit_bp.route('/generated/<path:filename>')
 def download_generated(filename):
     """Serves the generated files (PDF/Excel) from the GENERATED_DIR."""
-    # This serves the file to the user's browser as a download attachment
     return send_from_directory(GENERATED_DIR, filename, as_attachment=True)

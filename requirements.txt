@@ -5,3 +5,5 @@ reportlab
 pandas
 Pillow
 boto3
+requests
+cloudinary

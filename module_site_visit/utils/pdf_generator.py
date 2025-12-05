@@ -1,23 +1,23 @@
 import os
 import time
 import logging
-import tempfile # For creating temporary files
+import tempfile
 from datetime import datetime
+import requests
+from io import BytesIO
+from PIL import Image as PILImage # Note: This import wasn't used in the logic, but is often needed for image processing. Removed it as it wasn't required by ReportLab in the context provided.
 
-# --- S3 IMPORTS AND CLIENT SETUP ---
+# --- S3 IMPORTS AND CLIENT SETUP (KEPT FOR SIGNATURES ONLY) ---
 import boto3
 from botocore.exceptions import ClientError
 
 # Configuration from environment variables
-# CRITICAL: Reads AWS_REGION and S3_BUCKET_NAME from your Render environment
 S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 
 try:
-    # Boto3 automatically uses AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from env
     s3_client_download = boto3.client('s3', region_name=AWS_REGION)
 except ClientError as e:
-    # This will log an error if AWS access is configured incorrectly
     logging.error(f"S3 Client initialization failed: {e}")
     s3_client_download = None
 
@@ -53,14 +53,13 @@ styles.add(ParagraphStyle(name='Answer', fontName='Helvetica', fontSize=10, lead
 styles.add(ParagraphStyle(name='SmallText', fontName='Helvetica', fontSize=8, leading=10))
 
 # =================================================================
-# --- NEW S3 DOWNLOAD IMPLEMENTATION ---
-# This function is now fully self-contained and uses Boto3
+# --- S3 DOWNLOAD FUNCTIONS (KEPT FOR SIGNATURES ONLY) ---
 # =================================================================
 
 def download_s3_file_to_temp(s3_key):
     """
     Downloads a file from S3 to a temporary local file and returns the path.
-    The caller (get_image_from_s3) is responsible for deleting the temporary file.
+    Used ONLY for signatures now.
     """
     if not s3_client_download or not s3_key or not S3_BUCKET_NAME:
         logger.warning("S3 client not initialized or missing key/bucket name for download.")
@@ -68,11 +67,9 @@ def download_s3_file_to_temp(s3_key):
         
     file_path = None
     try:
-        # Create a named temporary file that won't be deleted immediately
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             file_path = tmp.name
             
-        # Download the S3 object to the temporary file path
         s3_client_download.download_file(S3_BUCKET_NAME, s3_key, file_path)
         
         logger.info(f"Successfully downloaded {s3_key} to {file_path}")
@@ -80,7 +77,6 @@ def download_s3_file_to_temp(s3_key):
         
     except ClientError as e:
         logger.error(f"Error downloading S3 file {s3_key}: {e}")
-        # If an error occurs, clean up the temp file if created
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
         return None
@@ -89,11 +85,6 @@ def download_s3_file_to_temp(s3_key):
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
         return None
-
-# =================================================================
-# --- HELPER FUNCTIONS FOR S3 ACCESS (UPDATED) ---
-# The logic inside these functions is correct for temp file handling.
-# =================================================================
 
 def get_sig_image_from_s3(s3_key, name):
     """
@@ -104,13 +95,11 @@ def get_sig_image_from_s3(s3_key, name):
         
     temp_file_path = None
     try:
-        # 1. Download file to a temporary local path
-        temp_file_path = download_s3_file_to_temp(s3_key) # <-- NOW CALLS THE BOTO3 IMPLEMENTATION
+        temp_file_path = download_s3_file_to_temp(s3_key)
         
         if not temp_file_path or not os.path.exists(temp_file_path):
             return Paragraph(f'Image Fetch Failed: {name}', styles['Normal'])
 
-        # 2. Use ReportLab to read the image from the temporary path
         sig_img = Image(temp_file_path)
         sig_img.drawHeight = 0.7 * inch
         sig_img.drawWidth = 2.5 * inch
@@ -120,21 +109,59 @@ def get_sig_image_from_s3(s3_key, name):
         logger.error(f"Failed to load S3 signature image for {name} ({s3_key}): {e}")
         return Paragraph(f'Image Process Failed: {name}', styles['Normal'])
     finally:
-        # 3. CRITICAL: DELETE THE TEMPORARY FILE IMMEDIATELY
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
-def get_image_from_s3(s3_key, width, height, placeholder_text="No Photo"):
+# =================================================================
+# --- NEW CLOUDINARY DOWNLOAD IMPLEMENTATION (FOR PHOTOS) ---
+# =================================================================
+
+def download_cloudinary_image_to_temp(url):
     """
-    Loads report photo image from S3. Requires S3_key as input.
+    Fetches image content from a public URL and saves it to a temporary local file.
     """
-    if not s3_key:
+    if not url:
+        return None
+        
+    file_path = None
+    try:
+        # Fetch the image content
+        response = requests.get(url, timeout=15)
+        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+
+        # Create a named temporary file
+        with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
+            file_path = tmp.name
+            # Save the downloaded binary content to the temporary file
+            tmp.write(response.content)
+
+        logger.info(f"Successfully downloaded image from URL to {file_path}")
+        return file_path
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"ERROR: Failed to download Cloudinary image from {url}: {e}")
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error during Cloudinary image save: {e}")
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        return None
+
+
+def get_image_from_cloudinary(url, width, height, placeholder_text="No Photo"):
+    """
+    Loads report photo image from a Cloudinary URL.
+    This replaces the old get_image_from_s3 logic for report items.
+    """
+    if not url:
         return Paragraph(f'<font size="8">{placeholder_text}</font>', styles['SmallText'])
         
     temp_file_path = None
     try:
-        # 1. Download file to a temporary local path
-        temp_file_path = download_s3_file_to_temp(s3_key) # <-- NOW CALLS THE BOTO3 IMPLEMENTATION
+        # 1. Download file from URL to a temporary local path
+        temp_file_path = download_cloudinary_image_to_temp(url)
 
         if not temp_file_path or not os.path.exists(temp_file_path):
             return Paragraph(f'<font size="8">Image Fetch Failed</font>', styles['SmallText'])
@@ -146,17 +173,18 @@ def get_image_from_s3(s3_key, width, height, placeholder_text="No Photo"):
         img.hAlign = 'CENTER' 
         return img
     except Exception as e:
-        logger.error(f"Image load error for S3 key {s3_key}: {e}")
+        logger.error(f"Image load error for URL {url}: {e}")
         return Paragraph(f'<font size="8">Image Process Error</font>', styles['SmallText'])
     finally:
         # 3. CRITICAL: DELETE THE TEMPORARY FILE IMMEDIATELY
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
-# --- The rest of the code is unchanged as it correctly uses the new S3 functions ---
+# =================================================================
+# --- REPORT COMPONENTS (CLEANED INDENTATION) ---
+# =================================================================
 
 def create_signature_table(visit_info):
-# ... unchanged ...
     sig_story = []
     
     sig_story.append(Spacer(1, 0.3*inch))
@@ -225,7 +253,7 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
     pdf_path = os.path.join(output_dir, pdf_filename)
     
     doc = SimpleDocTemplate(pdf_path, pagesize=A4, rightMargin=0.5 * inch, leftMargin=0.5 * inch, topMargin=0.5 * inch, bottomMargin=0.75 * inch)
-                            
+                        
     Story = build_report_story(visit_info, processed_items)
     
     doc.build(
@@ -241,7 +269,6 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
 
 
 def build_report_story(visit_info, processed_items):
-# ... unchanged ...
     story = []
     
     # --- 1. Header and Title with Logo (Unchanged) ---
@@ -330,8 +357,10 @@ def build_report_story(visit_info, processed_items):
             story.append(Spacer(1, 0.1*inch))
             
             # Photos for this item (if available)
-            # NOTE: 'image_paths' must now contain S3 keys (e.g., 'site-visit-photos/uuid.jpg')
-            if item.get('image_keys'): 
+            # Use 'image_urls' (from Cloudinary) instead of 'image_keys' (from S3)
+            image_urls = item.get('image_urls')
+            
+            if image_urls: 
                 
                 photo_label_data = [[Paragraph('<b>Photos:</b>', styles['Question'])]]
                 photo_label_table = Table(photo_label_data, colWidths=[PAGE_WIDTH])
@@ -342,10 +371,10 @@ def build_report_story(visit_info, processed_items):
                 story.append(photo_label_table)
 
                 image_elements = []
-                # item['image_keys'] is the new list of S3 keys
-                for key in item['image_keys']:
-                    # UPDATED: Use the S3 image loading function
-                    img = get_image_from_s3(key, 2.2 * inch, 1.7 * inch, placeholder_text="Photo N/A")
+                # Loop over the Cloudinary URLs
+                for url in image_urls:
+                    # Use the NEW Cloudinary image loading function
+                    img = get_image_from_cloudinary(url, 2.2 * inch, 1.7 * inch, placeholder_text="Photo N/A")
                     image_elements.append(img)
 
                 # Arrange images into rows of 3 (Unchanged)

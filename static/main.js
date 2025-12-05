@@ -1,12 +1,15 @@
-// main.js (UPDATED FOR S3 DIRECT UPLOAD)
+// main.js (UPDATED FOR CLOUDINARY DIRECT UPLOAD)
 
 // Declare global variables attached to the window object for universal access
 window.dropdownData = DROPDOWN_DATA; 
-// NOTE: pendingItems now stores the file object and, later, the S3 key/URL.
 window.pendingItems = []; 
 window.techPad = null;
 window.opManPad = null;
 const MAX_PHOTOS = 10; // Limit for photos per item
+
+// --- NEW GLOBAL CLOUDINARY CONFIGURATION ---
+let CLOUDINARY_CLOUD_NAME = '';
+let CLOUDINARY_UPLOAD_PRESET = '';
 
 // Retrieve the main form and pending list container
 const form = document.getElementById('visitForm');
@@ -113,12 +116,9 @@ window.showNotification = function(type, title, body) {
     }
 }
 
-// --- Image Resizing and Compression Function (UNMODIFIED - Assuming you want to keep resizing before S3 upload) ---
+// --- Image Resizing and Compression Function (UNMODIFIED) ---
 function resizeImage(file, maxWidth, maxHeight, quality) {
     return new Promise((resolve) => {
-        // ... (resize logic remains here) ...
-        // [Original resizeImage implementation is kept here]
-        
         // Skip non-image files gracefully
         if (!file || !file.type.startsWith('image/')) {
             resolve(file); 
@@ -329,7 +329,7 @@ window.addItem = async function() {
     });
     
     if (!isValid) {
-        showNotification('error', 'Validation Error', 'Please select **Asset**, **System**, and **Description** before adding an item.');
+        showNotification('error', 'Validation Error', 'Please ensure **Asset**, **System**, and **Description** are selected before adding an item.');
         return; 
     }
     
@@ -407,7 +407,7 @@ window.addItem = async function() {
 
 
 // ---------------------------------------------------------------
-// 5. Form Submission Logic - REWRITTEN FOR S3 DIRECT UPLOAD
+// 5. Form Submission Logic - REWRITTEN FOR CLOUDINARY DIRECT UPLOAD
 // ---------------------------------------------------------------
 
 // Helper function to trigger a programmatic download (UNMODIFIED)
@@ -420,7 +420,91 @@ const triggerDownload = (url) => {
     document.body.removeChild(a);
 };
 
-// **REPLACED window.onSubmit**
+/**
+ * PHASE 2: Uploads photos directly to Cloudinary and sends the final URLs to the server.
+ * @param {string} visitId - The report ID received from the server.
+ */
+async function uploadPhotosToCloudinary(visitId) {
+    const uploadPromises = [];
+    const finalPhotoUrls = []; 
+    let successfulUploads = 0;
+    const allPhotos = window.pendingItems.flatMap(item => item.photos).filter(f => f && f.type.startsWith('image/'));
+    const totalPhotos = allPhotos.length;
+
+    const statusText = document.getElementById('status'); 
+    statusText.textContent = `Uploading 0/${totalPhotos} photos directly to Cloudinary...`;
+
+    // Map the resized File objects to their original report item index and photo index
+    let photoIndexCounter = 0;
+    window.pendingItems.forEach((item, item_index) => {
+        item.photos.forEach((fileToUpload, photo_index) => {
+            
+            if (!fileToUpload || !fileToUpload.type.startsWith('image/')) return;
+
+            const uploadPromise = new Promise((resolve, reject) => {
+                
+                // 1. Create the Cloudinary Upload Data
+                const formData = new FormData();
+                formData.append('file', fileToUpload);
+                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                
+                // Construct the Cloudinary API URL
+                const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
+                fetch(CLOUDINARY_URL, {
+                    method: 'POST',
+                    body: formData,
+                })
+                .then(response => response.json())
+                .then(uploadResult => {
+                    if (uploadResult.secure_url) {
+                        // Success: Save the permanent image URL and index info
+                        finalPhotoUrls.push({
+                            item_index: item_index,
+                            photo_index: photo_index,
+                            photo_url: uploadResult.secure_url, 
+                        });
+                        successfulUploads++;
+                        photoIndexCounter++;
+                        statusText.textContent = `Uploading ${successfulUploads}/${totalPhotos} photos directly to Cloudinary...`;
+                        resolve(uploadResult.secure_url);
+                    } else {
+                        // Cloudinary returns a non-200 or an error object
+                        const errorMessage = uploadResult.error ? uploadResult.error.message : 'Unknown Cloudinary error';
+                        throw new Error(`Cloudinary upload failed: ${errorMessage}`);
+                    }
+                })
+                .catch(error => {
+                    console.error("Cloudinary Upload Error:", error);
+                    showNotification('error', 'Photo Upload Failed', `A photo upload failed. See console for details: ${error.message}`);
+                    reject(error); // Rejecting the promise stops Promise.all
+                });
+            });
+            
+            uploadPromises.push(uploadPromise);
+        });
+    });
+
+    // Wait for all uploads to complete successfully
+    await Promise.all(uploadPromises); 
+
+    // --- PHASE 2b: SEND FINAL URLs TO SERVER ---
+    statusText.textContent = 'All photos uploaded. Notifying server of final URLs...';
+
+    const updateResponse = await fetch(`/api/submit/update-photos?visit_id=${visitId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photo_urls: finalPhotoUrls })
+    });
+    
+    const updateResult = await updateResponse.json();
+
+    if (!updateResponse.ok || updateResult.status !== 'success') {
+        throw new Error('Server failed to update photo URLs after Cloudinary upload.');
+    }
+}
+
+// **REPLACED window.onSubmit** (Modified Phase 1 & 2)
 window.onSubmit = async function(event) {
     event.preventDefault(); 
 
@@ -453,7 +537,7 @@ window.onSubmit = async function(event) {
     
     // --- Prepare Metadata Payload (Without File Objects) ---
     const metadataItems = window.pendingItems.map(item => {
-        // Just send the item details and photo count. We will replace 'photos' with S3 keys later.
+        // Just send the item details and photo count.
         const { photos, ...itemDetails } = item; 
         itemDetails.photo_count = item.photos.length; 
         return itemDetails;
@@ -476,12 +560,11 @@ window.onSubmit = async function(event) {
         return;
     }
 
-    // --- 3. PHASE 1: Submit Metadata to Server & Get S3 Pre-Signed URLs ---
-    statusText.textContent = 'Submitting metadata and requesting secure photo links...';
-    let signedUrls = [];
     let visitId = null;
 
     try {
+        // --- 3. PHASE 1: Submit Metadata to Server & Get CLOUDINARY CONFIG ---
+        statusText.textContent = 'Submitting metadata and requesting Cloudinary configuration...';
         const metadataResponse = await fetch('/api/submit/metadata', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -490,71 +573,21 @@ window.onSubmit = async function(event) {
 
         const metadataResult = await metadataResponse.json();
 
-        if (!metadataResponse.ok) {
+        if (!metadataResponse.ok || metadataResult.status !== 'success') {
             throw new Error(metadataResult.error || `Server error: ${metadataResponse.status}`);
         }
         
-        // The server response must include the report ID and the list of URLs/keys
-        signedUrls = metadataResult.signed_urls;
+        // --- CRITICAL: Get Cloudinary details from server ---
+        CLOUDINARY_CLOUD_NAME = metadataResult.cloudinary_cloud_name;
+        CLOUDINARY_UPLOAD_PRESET = metadataResult.cloudinary_upload_preset;
         visitId = metadataResult.visit_id;
 
-    } catch (e) {
-        showNotification('error', 'Metadata Error', `Failed to initialize report and get S3 links: ${e.message}`);
-        if (submitButton) submitButton.disabled = false;
-        return;
-    }
+        // --- 4. PHASE 2: Upload Photos Directly to CLOUDINARY & Save URLs to Server ---
+        await uploadPhotosToCloudinary(visitId);
 
-    // --- 4. PHASE 2: Upload Photos Directly to S3 (Bypassing Render Instance) ---
-    let successfulUploads = 0;
-    statusText.textContent = `Uploading 0/${signedUrls.length} photos directly to S3...`;
+        // --- 5. PHASE 3: Finalize Report & Generate PDF on Server ---
+        statusText.textContent = 'All photos uploaded. Finalizing report and generating documents...';
 
-    const uploadPromises = signedUrls.map(async (urlData, index) => {
-        // Find the corresponding File object from the original pendingItems list
-        const item = window.pendingItems[urlData.item_index];
-        const fileToUpload = item.photos[urlData.photo_index];
-        
-        try {
-            const uploadResponse = await fetch(urlData.url, {
-                method: 'PUT',
-                body: fileToUpload,
-                // CRITICAL FIX: Content-Type must match what was specified when generating the presigned URL
-                // Your Python code specifies 'image/jpeg', so this must be 'image/jpeg'.
-                headers: { 'Content-Type': 'image/jpeg' } 
-            });
-            
-            if (!uploadResponse.ok) {
-                throw new Error(`S3 upload failed for photo index ${index}. Status: ${uploadResponse.status}`);
-            }
-            
-            successfulUploads++;
-            statusText.textContent = `Uploading ${successfulUploads}/${signedUrls.length} photos directly to S3...`;
-            
-            // Return the S3 key for final confirmation
-            return { s3_key: urlData.s3_key };
-
-        } catch (error) {
-            console.error(error);
-            showNotification('error', 'Photo Upload Failed', `A photo upload failed. Please check the console for details.`);
-            // Throwing an error here will stop Promise.all and skip Phase 3
-            throw error;
-        }
-    });
-
-    try {
-        // Wait for all files to be uploaded to S3
-        await Promise.all(uploadPromises); 
-
-    } catch (e) {
-        // Catch any error from Promise.all (i.e., any failed photo upload)
-        showNotification('error', 'Upload Interrupted', 'One or more photo uploads failed. Submission cancelled.');
-        if (submitButton) submitButton.disabled = false;
-        return;
-    }
-
-    // --- 5. PHASE 3: Finalize Report & Generate PDF on Server ---
-    statusText.textContent = 'All photos uploaded. Finalizing report and generating documents...';
-
-    try {
         const finalizeResponse = await fetch(`/api/submit/finalize?visit_id=${visitId}`, { method: 'GET' });
         const result = await finalizeResponse.json();
 
@@ -594,8 +627,9 @@ window.onSubmit = async function(event) {
         }
 
     } catch (error) {
-        // Network error during finalization
-        showNotification('error', 'Network Error', `Could not finalize request. Details: **${error.message}**`);
+        // Catch any network or process error (metadata or upload)
+        console.error("Submission Error:", error);
+        showNotification('error', 'Submission Interrupted', `A critical step failed. Details: **${error.message}**`);
     } finally {
         if (submitButton) submitButton.disabled = false;
     }
