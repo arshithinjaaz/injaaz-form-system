@@ -517,8 +517,9 @@ window.onSubmit = async function(event) {
             const uploadResponse = await fetch(urlData.url, {
                 method: 'PUT',
                 body: fileToUpload,
-                // CRITICAL: Content-Type must match what was specified when generating the presigned URL
-                headers: { 'Content-Type': fileToUpload.type } 
+                // CRITICAL FIX: Content-Type must match what was specified when generating the presigned URL
+                // Your Python code specifies 'image/jpeg', so this must be 'image/jpeg'.
+                headers: { 'Content-Type': 'image/jpeg' } 
             });
             
             if (!uploadResponse.ok) {

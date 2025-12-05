@@ -6,6 +6,7 @@ import base64
 import logging
 import boto3
 from botocore.exceptions import ClientError
+from io import BytesIO # Import for handling file content in memory
 
 # --- Configuration & Initialization ---
 # CRITICAL: These must be set as environment variables on your Render instance.
@@ -97,4 +98,31 @@ def decode_base64_to_s3(base64_data_url, file_prefix, bucket_name=S3_BUCKET_NAME
         return s3_key
     except Exception as e:
         logging.error(f"Failed to upload base64 signature to S3 for {file_prefix}: {e}")
+        return None
+        
+# =================================================================
+# 3. File Download Helper: Get content from S3 (For Report Generation)
+#    Called by: pdf_generator.py, excel_writer.py
+# =================================================================
+
+def get_s3_file_content(s3_key, bucket_name=S3_BUCKET_NAME):
+    """
+    Retrieves the content of a file from S3 and returns it as a BytesIO object.
+    This is necessary for the report generator to read the private files.
+    """
+    if not s3_client or not bucket_name:
+        logging.error("S3 client not initialized or bucket name missing.")
+        return None
+
+    try:
+        response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+        # Read the file content and return it as a stream
+        file_stream = BytesIO(response['Body'].read())
+        return file_stream
+    except ClientError as e:
+        # Check if the error is 404 (Not Found)
+        if e.response['Error']['Code'] == 'NoSuchKey':
+            logging.warning(f"S3 file not found for key: {s3_key}")
+            return None
+        logging.error(f"Error retrieving file from S3 (Key: {s3_key}): {e}")
         return None
