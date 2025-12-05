@@ -22,7 +22,7 @@ from .utils.pdf_generator import generate_visit_pdf
 CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', 'dv7kljagk') 
 CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '863137649681362') 
 CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '2T8gWf0H--OH2T55rcYS9qXm9Bg') 
-CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET') # No default set here
+CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET','render_site_upload') # No default set here
 
 # Initialize Cloudinary (required for server-side upload of signatures)
 try:

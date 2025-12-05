@@ -1,7 +1,7 @@
 // main.js (FULLY UPDATED FOR CLOUDINARY DIRECT UPLOAD)
 
 // Declare global variables attached to the window object for universal access
-window.dropdownData = DROPDOWN_DATA; 
+window.dropdownData = DROPDOWN_DATA; // Assuming DROPDOWN_DATA is defined elsewhere or loaded first
 window.pendingItems = []; 
 window.techPad = null;
 window.opManPad = null;
@@ -62,7 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Helper function to show a custom modal notification (UNMODIFIED)
 window.showNotification = function(type, title, body) {
-    // ... (Your showNotification implementation goes here, unchanged) ...
     const modalElement = document.getElementById('customAlertModal');
     const titleElement = document.getElementById('customAlertTitle');
     const bodyElement = document.getElementById('customAlertBody');
@@ -116,7 +115,6 @@ window.showNotification = function(type, title, body) {
 // --- Image Resizing and Compression Function (UNMODIFIED) ---
 function resizeImage(file, maxWidth, maxHeight, quality) {
     return new Promise((resolve) => {
-        // ... (Your resizeImage implementation goes here, unchanged) ...
         // Skip non-image files gracefully
         if (!file || !file.type.startsWith('image/')) {
             resolve(file); 
@@ -190,7 +188,6 @@ function resizeImage(file, maxWidth, maxHeight, quality) {
 // ---------------------------------------------------------------
 
 function initDropdowns() {
-    // ... (Your initDropdowns implementation goes here, unchanged) ...
     const assetSelect = document.getElementById('assetSelect');
     
     assetSelect.innerHTML = '<option value="" selected disabled>Select Asset</option>';
@@ -204,7 +201,6 @@ function initDropdowns() {
 }
 
 function setupCascadingDropdowns() {
-    // ... (Your setupCascadingDropdowns implementation goes here, unchanged) ...
     const assetSelect = document.getElementById('assetSelect');
     const systemSelect = document.getElementById('systemSelect');
     const descriptionSelect = document.getElementById('descriptionSelect');
@@ -259,7 +255,6 @@ function setupCascadingDropdowns() {
 // ---------------------------------------------------------------
 
 function renderPendingItems() {
-    // ... (Your renderPendingItems implementation goes here, unchanged) ...
     if (!pendingItemsList) return;
     
     pendingItemsList.innerHTML = '';
@@ -293,7 +288,6 @@ function renderPendingItems() {
 }
 
 window.removeItem = function(index) {
-    // ... (Your removeItem implementation goes here, unchanged) ...
     if (index >= 0 && index < window.pendingItems.length) {
         window.pendingItems.splice(index, 1);
         renderPendingItems();
@@ -306,7 +300,6 @@ window.removeItem = function(index) {
 // ---------------------------------------------------------------
 
 window.addItem = async function() { 
-    // ... (Your addItem implementation goes here, unchanged) ...
     const assetSelect = document.getElementById('assetSelect');
     const systemSelect = document.getElementById('systemSelect');
     const descriptionSelect = document.getElementById('descriptionSelect');
@@ -468,7 +461,12 @@ async function uploadPhotosToCloudinary(visitId, cloudName, uploadPreset) {
                 .then(response => {
                     if (!response.ok) {
                         // Throw an error for non-200 status codes (e.g., 400, 500)
-                        throw new Error(`Cloudinary API responded with status: ${response.status}`);
+                        // Read the error message from the response body if possible
+                        return response.json().then(err => {
+                             throw new Error(`Cloudinary API responded with status: ${response.status}. Error: ${err.error.message}`);
+                        }).catch(() => {
+                             throw new Error(`Cloudinary API responded with status: ${response.status}.`);
+                        });
                     }
                     return response.json();
                 })
