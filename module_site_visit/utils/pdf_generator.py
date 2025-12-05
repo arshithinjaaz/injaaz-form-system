@@ -4,24 +4,12 @@ import logging
 import tempfile
 from datetime import datetime
 import requests
-from io import BytesIO
-from PIL import Image as PILImage # Note: This import wasn't used in the logic, but is often needed for image processing. Removed it as it wasn't required by ReportLab in the context provided.
+from io import BytesIO # Required by requests, though not directly used for file I/O
 
-# --- S3 IMPORTS AND CLIENT SETUP (KEPT FOR SIGNATURES ONLY) ---
-import boto3
-from botocore.exceptions import ClientError
-
-# Configuration from environment variables
-S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
-AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
-
-try:
-    s3_client_download = boto3.client('s3', region_name=AWS_REGION)
-except ClientError as e:
-    logging.error(f"S3 Client initialization failed: {e}")
-    s3_client_download = None
-
-# -----------------------------------
+# --- REMOVED S3/Boto3 IMPORTS AND CLIENT SETUP ---
+# Removed: import boto3
+# Removed: from botocore.exceptions import ClientError
+# Removed: S3_BUCKET_NAME, AWS_REGION, s3_client_download initialization
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -29,16 +17,15 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Par
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
-# --- Logging Configuration (Kept) ---
+# --- Logging Configuration ---
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# --- CONFIGURATION & BRANDING (Kept) ---
+# --- CONFIGURATION & BRANDING ---
 BRAND_COLOR = colors.HexColor('#198754') 
 ACCENT_BG_COLOR = colors.HexColor('#F2FBF8')
 GRID_COLOR = colors.HexColor('#CCCCCC')
 
-# NOTE: Logo path remains local since it's a static app file
 try:
     LOGO_PATH = os.path.join('/app', 'module_site_visit', 'static', 'INJAAZ.png')
     if not os.path.exists(LOGO_PATH):
@@ -52,80 +39,21 @@ styles.add(ParagraphStyle(name='Question', fontName='Helvetica-Bold', fontSize=1
 styles.add(ParagraphStyle(name='Answer', fontName='Helvetica', fontSize=10, leading=12))
 styles.add(ParagraphStyle(name='SmallText', fontName='Helvetica', fontSize=8, leading=10))
 
-# =================================================================
-# --- S3 DOWNLOAD FUNCTIONS (KEPT FOR SIGNATURES ONLY) ---
-# =================================================================
-
-def download_s3_file_to_temp(s3_key):
-    """
-    Downloads a file from S3 to a temporary local file and returns the path.
-    Used ONLY for signatures now.
-    """
-    if not s3_client_download or not s3_key or not S3_BUCKET_NAME:
-        logger.warning("S3 client not initialized or missing key/bucket name for download.")
-        return None
-        
-    file_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            file_path = tmp.name
-            
-        s3_client_download.download_file(S3_BUCKET_NAME, s3_key, file_path)
-        
-        logger.info(f"Successfully downloaded {s3_key} to {file_path}")
-        return file_path
-        
-    except ClientError as e:
-        logger.error(f"Error downloading S3 file {s3_key}: {e}")
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error during download for {s3_key}: {e}")
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
-        return None
-
-def get_sig_image_from_s3(s3_key, name):
-    """
-    Loads signature image from S3. Requires S3_key as input.
-    """
-    if not s3_key:
-        return Paragraph(f'Unsigned: {name}', styles['Normal'])
-        
-    temp_file_path = None
-    try:
-        temp_file_path = download_s3_file_to_temp(s3_key)
-        
-        if not temp_file_path or not os.path.exists(temp_file_path):
-            return Paragraph(f'Image Fetch Failed: {name}', styles['Normal'])
-
-        sig_img = Image(temp_file_path)
-        sig_img.drawHeight = 0.7 * inch
-        sig_img.drawWidth = 2.5 * inch
-        sig_img.hAlign = 'LEFT' 
-        return sig_img
-    except Exception as e:
-        logger.error(f"Failed to load S3 signature image for {name} ({s3_key}): {e}")
-        return Paragraph(f'Image Process Failed: {name}', styles['Normal'])
-    finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
 
 # =================================================================
-# --- NEW CLOUDINARY DOWNLOAD IMPLEMENTATION (FOR PHOTOS) ---
+# --- CLOUDINARY DOWNLOAD IMPLEMENTATION (FOR PHOTOS AND SIGNATURES) ---
 # =================================================================
 
 def download_cloudinary_image_to_temp(url):
     """
     Fetches image content from a public URL and saves it to a temporary local file.
+    Used for ALL external images (Report Photos and Signatures).
     """
     if not url:
         return None
         
     file_path = None
     try:
-        # Fetch the image content
         response = requests.get(url, timeout=15)
         response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
 
@@ -139,21 +67,53 @@ def download_cloudinary_image_to_temp(url):
         return file_path
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"ERROR: Failed to download Cloudinary image from {url}: {e}")
+        logger.error(f"ERROR: Failed to download image from {url}: {e}")
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
         return None
     except Exception as e:
-        logger.error(f"Unexpected error during Cloudinary image save: {e}")
+        logger.error(f"Unexpected error during image save: {e}")
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
         return None
+
+# =================================================================
+# --- NEW SIGNATURE DOWNLOAD IMPLEMENTATION (URL-BASED) ---
+# This REPLACES the old get_sig_image_from_s3 logic.
+# =================================================================
+
+def get_sig_image_from_url(url, name):
+    """
+    Loads signature image from a Cloudinary URL.
+    """
+    if not url:
+        return Paragraph(f'Unsigned: {name}', styles['Normal'])
+        
+    temp_file_path = None
+    try:
+        # Use the common download function
+        temp_file_path = download_cloudinary_image_to_temp(url)
+        
+        if not temp_file_path or not os.path.exists(temp_file_path):
+            return Paragraph(f'Image Fetch Failed: {name}', styles['Normal'])
+
+        sig_img = Image(temp_file_path)
+        sig_img.drawHeight = 0.7 * inch
+        sig_img.drawWidth = 2.5 * inch
+        sig_img.hAlign = 'LEFT' 
+        return sig_img
+    except Exception as e:
+        logger.error(f"Failed to load signature image for {name} ({url}): {e}")
+        return Paragraph(f'Image Process Failed: {name}', styles['Normal'])
+    finally:
+        # CRITICAL: Delete the temporary file
+        if temp_file_path and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
 
 
 def get_image_from_cloudinary(url, width, height, placeholder_text="No Photo"):
     """
     Loads report photo image from a Cloudinary URL.
-    This replaces the old get_image_from_s3 logic for report items.
     """
     if not url:
         return Paragraph(f'<font size="8">{placeholder_text}</font>', styles['SmallText'])
@@ -181,7 +141,7 @@ def get_image_from_cloudinary(url, width, height, placeholder_text="No Photo"):
             os.remove(temp_file_path)
 
 # =================================================================
-# --- REPORT COMPONENTS (CLEANED INDENTATION) ---
+# --- REPORT COMPONENTS ---
 # =================================================================
 
 def create_signature_table(visit_info):
@@ -191,13 +151,15 @@ def create_signature_table(visit_info):
     sig_story.append(Paragraph('4. Signatures', styles['BoldTitle'])) 
     sig_story.append(Spacer(1, 0.1*inch)) 
 
-    tech_sig_key = visit_info.get('tech_signature_key')
-    opMan_sig_key = visit_info.get('opMan_signature_key')
+    # *** CRITICAL CHANGE: Retrieve URL keys instead of S3 keys ***
+    tech_sig_url = visit_info.get('tech_signature_url')
+    opMan_sig_url = visit_info.get('opMan_signature_url')
 
-    tech_sig = get_sig_image_from_s3(tech_sig_key, 'Technician')
-    opMan_sig = get_sig_image_from_s3(opMan_sig_key, 'Operation Manager')
+    # *** CRITICAL CHANGE: Call the new URL-based function ***
+    tech_sig = get_sig_image_from_url(tech_sig_url, 'Technician')
+    opMan_sig = get_sig_image_from_url(opMan_sig_url, 'Operation Manager')
 
-    # Get names for display
+    # Get names for display (Unchanged)
     tech_name = visit_info.get('technician_name', 'N/A')
     opMan_name = visit_info.get('opMan_name', 'N/A')
 
@@ -241,10 +203,9 @@ def page_layout_template(canvas, doc):
     canvas.restoreState()
 
 # --- MAIN GENERATOR FUNCTION (Unchanged) ---
-
 def generate_visit_pdf(visit_info, processed_items, output_dir):
     
-    start_time = time.time() # Start timer
+    start_time = time.time() 
     logger.info(f"PDF generation started for {visit_info.get('building_name', 'N/A')} at {datetime.now()}")
 
     building_name = visit_info.get('building_name', 'Unknown').replace(' ', '_')
@@ -263,7 +224,7 @@ def generate_visit_pdf(visit_info, processed_items, output_dir):
     )
     
     end_time = time.time()
-    logger.info(f"PDF build finished in {end_time - start_time:.2f} seconds.") # End timer
+    logger.info(f"PDF build finished in {end_time - start_time:.2f} seconds.") 
 
     return pdf_path, pdf_filename
 
@@ -277,7 +238,6 @@ def build_report_story(visit_info, processed_items):
 
     logo = Paragraph('', styles['Normal'])
     
-    # Attempt to load the Logo (Remains local)
     try:
         if os.path.exists(LOGO_PATH):
             logo_img = Image(LOGO_PATH)
@@ -326,7 +286,7 @@ def build_report_story(visit_info, processed_items):
     story.append(Spacer(1, 0.2*inch))
 
 
-    # --- 3. Report Items (Section 2 - Updated) ---
+    # --- 3. Report Items (Section 2 - Unchanged) ---
     story.append(Paragraph('2. Report Items', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
     
@@ -336,7 +296,7 @@ def build_report_story(visit_info, processed_items):
             story.append(Paragraph(f"<b>Item {i + 1}:</b> {item['asset']} / {item['system']} / {item['description']}", styles['Question']))
             story.append(Spacer(1, 0.05*inch))
             
-            # Details Table for each item (Unchanged)
+            # Details Table for each item
             item_details = [
                 ['Description:', item['description'], 'Quantity:', item['quantity']],
                 ['Brand/Model:', item['brand'] or 'N/A', 'Comments:', item['comments'] or 'N/A']
@@ -356,8 +316,7 @@ def build_report_story(visit_info, processed_items):
             story.append(item_table)
             story.append(Spacer(1, 0.1*inch))
             
-            # Photos for this item (if available)
-            # Use 'image_urls' (from Cloudinary) instead of 'image_keys' (from S3)
+            # Photos for this item
             image_urls = item.get('image_urls')
             
             if image_urls: 
@@ -371,13 +330,12 @@ def build_report_story(visit_info, processed_items):
                 story.append(photo_label_table)
 
                 image_elements = []
-                # Loop over the Cloudinary URLs
                 for url in image_urls:
-                    # Use the NEW Cloudinary image loading function
+                    # Uses the CLOUDINARY image loading function
                     img = get_image_from_cloudinary(url, 2.2 * inch, 1.7 * inch, placeholder_text="Photo N/A")
                     image_elements.append(img)
 
-                # Arrange images into rows of 3 (Unchanged)
+                # Arrange images into rows of 3
                 num_cols = 3
                 col_width = PAGE_WIDTH / num_cols 
                 rows = [image_elements[k:k + num_cols] for k in range(0, len(image_elements), num_cols)]
@@ -398,7 +356,7 @@ def build_report_story(visit_info, processed_items):
     else:
         story.append(Paragraph("No report items were added to this visit.", styles['Normal']))
 
-    # --- BLOCK 4 & 5 (Unchanged) ---
+    # --- BLOCK 4 & 5 (General Notes & Signatures) ---
     story.append(Paragraph('3. General Notes', styles['BoldTitle']))
     story.append(Spacer(1, 0.1*inch))
 
@@ -413,6 +371,7 @@ def build_report_story(visit_info, processed_items):
     ]))
     story.append(notes_table)
     
+    # Calls the UPDATED signature table which uses the URL-based functions
     story.extend(create_signature_table(visit_info))
     
     return story
