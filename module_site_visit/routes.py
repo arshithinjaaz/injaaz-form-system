@@ -1,4 +1,4 @@
-import os
+import os, logging
 import json
 import time
 import traceback
@@ -14,6 +14,8 @@ import cloudinary.api
 # NEW: Redis + RQ for background jobs
 import redis
 from rq import Queue
+from redis.exceptions import RedisError
+import redis
 
 # --- CORE IMPORTS ---
 # Assuming these are relative imports from the module's sub-directories
@@ -30,6 +32,20 @@ CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'render_si
 
 # Redis / RQ config
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+
+logger = logging.getLogger(__name__)
+
+REDIS_URL = os.environ.get('REDIS_URL')
+if not REDIS_URL:
+    logger.warning("REDIS_URL is not set. Background jobs will not run.")
+else:
+    try:
+        redis_conn = redis.from_url(REDIS_URL, socket_connect_timeout=5, decode_responses=True)
+        redis_conn.ping()
+        logger.info(f"Connected to Redis host: {REDIS_URL.split('@')[-1]}")
+    except RedisError:
+        logger.exception("Failed to connect to Redis. Check REDIS_URL and network connectivity.")
+        redis_conn = None
 
 # Validate config
 if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_API_KEY or not CLOUDINARY_API_SECRET:
