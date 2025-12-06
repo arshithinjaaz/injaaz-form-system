@@ -1,119 +1,194 @@
-import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill, colors
-from datetime import datetime
 import os
+import json
+import logging
+import xlsxwriter
+import requests
+import time
+from datetime import datetime
 
-# Define the data structure/column headers
-COLUMN_HEADERS = [
-    "Asset", 
-    "System", 
-    "Description", 
-    "Quantity", 
-    "Brand/Model", 
-    "Comments", 
-    "Photos Attached"
-]
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# --- CONFIGURATION ---
+CELL_BG_COLOR = '#F2FBF8'
+HEADER_COLOR = '#198754'
 
 def create_report_workbook(output_dir, visit_info, processed_items):
     """
-    Creates a new Excel workbook, writes header info, and populates the items list.
-    
-    Args:
-        output_dir (str): The directory where the file will be saved.
-        visit_info (dict): Data from the 'Visit Info' tab of the form.
-        processed_items (list): List of dictionaries for the report items.
-
-    Returns:
-        tuple: (excel_path, excel_filename)
+    Creates an Excel report (.xlsx) for the site visit and returns the path and filename.
+    Signature: (output_dir, visit_info, processed_items)
+    This function is defensive: accepts visit_info as dict or JSON string.
     """
-    # 1. Setup
-    workbook = openpyxl.Workbook()
-    sheet = workbook.active
-    sheet.title = "Site Visit Report"
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    building_name = visit_info.get('building_name', 'Report').replace(' ', '_')
-    excel_filename = f"{building_name}_Report_{timestamp}.xlsx"
+    start_time = time.time()
+
+    # Normalize visit_info if it was passed as a JSON string
+    if isinstance(visit_info, str):
+        try:
+            visit_info = json.loads(visit_info)
+        except Exception:
+            # fallback to empty dict (or keep raw under a key if desired)
+            visit_info = {"raw_visit_info": visit_info}
+    if visit_info is None:
+        visit_info = {}
+
+    # Safe extraction for building_name
+    building_name_raw = visit_info.get('building_name') if isinstance(visit_info, dict) else None
+    building_name = (building_name_raw or 'Unknown').replace(' ', '_')
+
+    ts = int(time.time())
+    excel_filename = f"Site_Visit_Report_{building_name}_{ts}.xlsx"
     excel_path = os.path.join(output_dir, excel_filename)
-    
-    # Define styles
-    bold_font = Font(bold=True)
-    # Using hex color for white text on dark background
-    header_font = Font(bold=True, size=10, color=colors.WHITE) 
 
-    # 2. Write Visit Info (Header Section)
-    sheet['A1'] = "SITE VISIT REPORT"
-    sheet['A1'].font = Font(bold=True, size=14)
-    
-    # Write key-value pairs for visit info
-    header_data = {
-        'A3': 'Building Name:', 'B3': visit_info.get('building_name', 'N/A'),
-        'A4': 'Address:', 'B4': visit_info.get('site_address', 'N/A'), # Corrected key: site_address vs building_address
-        'A5': 'Technician:', 'B5': visit_info.get('technician_name', 'N/A'),
-        'A6': 'Date Generated:', 'B6': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-    }
-    for cell, value in header_data.items():
-        sheet[cell] = value
-        if cell.startswith('A'):
-            sheet[cell].font = bold_font
+    try:
+        workbook = xlsxwriter.Workbook(excel_path)
+    except Exception as e:
+        logger.error(f"Failed to create workbook at {excel_path}: {e}")
+        return None, None
 
-    # Add a spacer row
-    REPORT_START_ROW = 8
-    sheet[f'A{REPORT_START_ROW-1}'] = "REPORTED ITEMS LIST"
-    sheet[f'A{REPORT_START_ROW-1}'].font = bold_font
-    
-    # 3. Write Column Headers
-    header_row = REPORT_START_ROW
-    for col_index, header_title in enumerate(COLUMN_HEADERS):
-        col_letter = openpyxl.utils.get_column_letter(col_index + 1)
-        cell = sheet[f'{col_letter}{header_row}']
-        cell.value = header_title
-        
-        # Apply style to header row
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrapText=True)
-        # Dark gray background color
-        cell.fill = PatternFill(start_color="333333", end_color="333333", fill_type="solid")
+    worksheet = workbook.add_worksheet('Site Visit Report')
 
-    # 4. Write Report Items List
-    current_row = header_row + 1
-    
-    for item in processed_items:
-        data_to_write = [
-            item.get('asset', ''),
-            item.get('system', ''),
-            item.get('description', ''),
-            item.get('quantity', 1),
-            item.get('brand', 'N/A'),
-            item.get('comments', 'N/A'),
-            # CRITICAL FIX: Use 'photos' key from the client payload instead of 'image_paths'
-            len(item.get('photos', [])) 
-        ]
-        
-        for col_index, value in enumerate(data_to_write):
-            col_letter = openpyxl.utils.get_column_letter(col_index + 1)
-            sheet[f'{col_letter}{current_row}'] = value
-            
-        current_row += 1
-            
-    # 5. Auto-fit columns for readability (optional)
-    for col in sheet.columns:
-        max_length = 0
-        column = col[0].column_letter # Get the column name
-        for cell in col:
-            try:
-                # Calculate max length based on content
-                if cell.value is not None:
-                    cell_len = len(str(cell.value))
-                    if cell_len > max_length:
-                        max_length = cell_len
-            except:
-                pass
-        # Set max width to 50 for large comments/descriptions
-        adjusted_width = (max_length + 2)
-        sheet.column_dimensions[column].width = adjusted_width if adjusted_width < 50 else 50 
+    # --- Define Formats ---
+    header_format = workbook.add_format({
+        'bold': True, 'font_color': 'white', 'bg_color': HEADER_COLOR,
+        'align': 'center', 'valign': 'vcenter', 'border': 1
+    })
+    title_format = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'left', 'font_color': HEADER_COLOR})
+    label_format = workbook.add_format({'bold': True, 'bg_color': CELL_BG_COLOR, 'align': 'left', 'valign': 'top', 'border': 1})
+    value_format = workbook.add_format({'align': 'left', 'valign': 'top', 'text_wrap': True, 'border': 1})
 
-    # 6. Save the new workbook
-    workbook.save(excel_path)
-    
-    return excel_path, excel_filename
+    # --- Setup Columns ---
+    worksheet.set_column('A:A', 30) # Labels
+    worksheet.set_column('B:B', 40) # Values
+    worksheet.set_column('C:C', 30) # Secondary Labels
+    worksheet.set_column('D:D', 40) # Secondary Values
+    worksheet.set_default_row(15)
+
+    row = 0
+
+    # =================================================================
+    # 1. Report Header and Details
+    # =================================================================
+    worksheet.write(row, 0, f"Site Visit Report - {visit_info.get('building_name', 'N/A')}", title_format)
+    row += 2
+
+    worksheet.write(row, 0, "1. Visit & Contact Details", title_format)
+    row += 1
+
+    details_data = [
+        ('Building Name:', visit_info.get('building_name', 'N/A'), 'Date of Visit:', datetime.now().strftime('%Y-%m-%d')),
+        ('Site Address:', visit_info.get('building_address', 'N/A'), 'Technician:', visit_info.get('technician_name', 'N/A')),
+        ('Contact Person:', visit_info.get('contact_person', 'N/A'), 'Operation Manager:', visit_info.get('opMan_name', 'N/A')),
+        ('Contact Number:', visit_info.get('contact_number', 'N/A'), 'Email:', visit_info.get('email', 'N/A')),
+    ]
+
+    for label1, value1, label2, value2 in details_data:
+        worksheet.write(row, 0, label1, label_format)
+        worksheet.write(row, 1, value1, value_format)
+        worksheet.write(row, 2, label2, label_format)
+        worksheet.write(row, 3, value2, value_format)
+        row += 1
+
+    row += 1
+
+    # =================================================================
+    # 2. Report Items
+    # =================================================================
+    worksheet.write(row, 0, "2. Report Items", title_format)
+    row += 1
+
+    # Define Item Table Headers
+    item_headers = ['Item #', 'Asset', 'System', 'Description', 'Quantity', 'Brand/Model', 'Comments', 'Photo URL']
+    worksheet.write_row(row, 0, item_headers, header_format)
+    row += 1
+
+    # Define Item Row Column Widths
+    worksheet.set_column('A:A', 8) # Item #
+    worksheet.set_column('B:B', 25) # Asset
+    worksheet.set_column('C:C', 25) # System
+    worksheet.set_column('D:D', 30) # Description
+    worksheet.set_column('E:E', 10) # Quantity
+    worksheet.set_column('F:F', 20) # Brand
+    worksheet.set_column('G:G', 50) # Comments
+    worksheet.set_column('H:H', 60) # Photo URL (Very wide for links)
+
+    if processed_items:
+        for i, item in enumerate(processed_items):
+            # Ensure item is dict-like
+            if not isinstance(item, dict):
+                item = {}
+
+            # Concatenate URLs for the Photo URL column
+            image_urls = item.get('image_urls', []) if isinstance(item, dict) else []
+            photo_url_string = '\n'.join(image_urls) if image_urls else 'N/A'
+
+            item_row_data = [
+                i + 1,
+                item.get('asset', 'N/A'),
+                item.get('system', 'N/A'),
+                item.get('description', 'N/A'),
+                item.get('quantity', 'N/A'),
+                item.get('brand', 'N/A') or 'N/A',
+                item.get('comments', 'N/A') or 'N/A',
+                photo_url_string
+            ]
+
+            # Write data row. Apply value format with text wrap.
+            worksheet.write_row(row, 0, item_row_data, value_format)
+            row += 1
+    else:
+        worksheet.write(row, 0, "No report items were added to this visit.", value_format)
+        row += 1
+
+    row += 1
+
+    # =================================================================
+    # 3. General Notes
+    # =================================================================
+    worksheet.write(row, 0, "3. General Notes", title_format)
+    row += 1
+
+    notes_text = visit_info.get('general_notes', "No general notes provided.")
+    worksheet.write(row, 0, "General Notes:", label_format)
+    worksheet.write(row, 1, notes_text, value_format)
+    worksheet.set_row(row, 80) # Give the notes row some height
+    row += 1
+
+    # =================================================================
+    # 4. Signatures (URL Only)
+    # =================================================================
+    row += 1
+    worksheet.write(row, 0, "4. Signatures (Cloudinary URLs)", title_format)
+    row += 1
+
+    sig_data = [
+        ('Technician Name:', visit_info.get('technician_name', 'N/A'), 'Technician Signature URL:', visit_info.get('tech_signature_url', 'Unsigned')),
+        ('Operation Manager Name:', visit_info.get('opMan_name', 'N/A'), 'Operation Manager Signature URL:', visit_info.get('opMan_signature_url', 'Unsigned')),
+    ]
+
+    for label1, value1, label2, value2 in sig_data:
+        worksheet.write(row, 0, label1, label_format)
+        worksheet.write(row, 1, value1, value_format)
+        worksheet.write(row, 2, label2, label_format)
+
+        # Write the full URL as a clickable hyperlink
+        if value2 and value2 != 'Unsigned':
+             try:
+                 worksheet.write_url(row, 3, value2, string='Link', tip='Click to view signature image')
+             except Exception:
+                 worksheet.write(row, 3, value2, value_format)
+        else:
+             worksheet.write(row, 3, value2, value_format)
+
+        row += 1
+
+    # Close the workbook
+    try:
+        workbook.close()
+        logger.info(f"Excel report finished in {time.time() - start_time:.2f} seconds.")
+        return excel_path, excel_filename
+    except xlsxwriter.exceptions.FileCreateError as e:
+        logger.error(f"Error creating Excel file: {e}")
+        return None, None
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during Excel generation: {e}")
+        return None, None

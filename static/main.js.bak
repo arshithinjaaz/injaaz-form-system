@@ -304,7 +304,7 @@ window.removeItem = function(index) {
 }
 
 // ---------------------------------------------------------------
-// 4. New Item Addition Logic (UPDATED: timeouts + robust error handling)
+// 4. New Item Addition Logic (UNMODIFIED)
 // ---------------------------------------------------------------
 
 window.addItem = async function() {
@@ -349,54 +349,25 @@ window.addItem = async function() {
         addItemButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing Photos (0/${rawFiles.length})...`;
     }
 
-    // Helper: promise timeout wrapper
-    function withTimeout(promise, ms, onTimeout) {
-        let timer;
-        return Promise.race([
-            promise,
-            new Promise((resolve) => {
-                timer = setTimeout(() => {
-                    try { onTimeout && onTimeout(); } catch (e) {}
-                    resolve(null); // resolve with null to indicate timeout
-                }, ms);
-            })
-        ]).finally(() => clearTimeout(timer));
-    }
-
-    // --- CRITICAL STEP: Resize all photos using Promises with per-file timeout ---
+    // --- CRITICAL STEP: Resize all photos using Promises ---
     let processedCount = 0;
 
     // Max 600px wide/tall, 40% JPEG quality
-    const resizePromises = rawFiles.map((file, index) => {
-        console.log(`addItem: scheduling resize for file[${index}]:`, file.name, file.size);
-        // wrap resizeImage with a timeout (10s)
-        return withTimeout(resizeImage(file, 600, 600, 0.4), 10000, () => {
-            console.warn(`resizeImage timed out for ${file.name}; falling back to original file`);
-        }).then(resizedFile => {
-            // if resizedFile is null (timeout) or falsy, fall back to original file
-            const finalFile = resizedFile || file;
+    const resizePromises = rawFiles.map(file => {
+        return resizeImage(file, 600, 600, 0.4).then(resizedFile => {
             processedCount++;
             // Update the status text after each photo
             if (addItemButton) {
                 addItemButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Processing Photos (${processedCount}/${rawFiles.length})...`;
             }
-            console.log(`addItem: finished processing file[${index}]:`, file.name, '->', finalFile.name || '(original)');
-            return finalFile;
-        }).catch(err => {
-            // In the rare case resizeImage rejects, fall back to original file and log
-            console.error(`addItem: resize failed for ${file.name}:`, err);
-            processedCount++;
-            if (addItemButton) {
-                addItemButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Processing Photos (${processedCount}/${rawFiles.length})...`;
-            }
-            return file;
+            return resizedFile;
         });
     });
 
     let resizedPhotos = [];
 
     try {
-        // Wait for ALL promises to resolve (photos to be resized/compressed) — with per-file timeouts the Promise.all will not hang
+        // Wait for ALL promises to resolve (photos to be resized/compressed)
         resizedPhotos = await Promise.all(resizePromises);
 
         // 1. Create the new item object
@@ -426,13 +397,11 @@ window.addItem = async function() {
         if (photoInput) photoInput.value = ''; // Clear file input
 
     } catch (e) {
-        console.error('addItem: unexpected error processing photos:', e);
         showNotification('error', 'Item Processing Error', `Failed to process/resize photos. Details: ${e.message || e}`);
     } finally {
-        // Always re-enable the button (important if earlier steps failed)
         if (addItemButton) {
-            addItemButton.disabled = false;
-            addItemButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add Item';
+            addItemButton.disabled = false; // Re-enable button
+            addItemButton.innerHTML = '<i class="fas fa-plus me-2"></i>Add Item'; // Restore button text
         }
     }
 }
@@ -476,7 +445,7 @@ async function uploadPhotosToCloudinary(visitId, cloudName, uploadPreset) {
     const totalPhotos = allPhotosEntries.length;
     if (totalPhotos === 0) {
         // If there are no photos, inform the server of an empty array (Phase 2 still needs to run)
-        const updateResponse = await fetch(`/site-visit/api/submit/update-photos?visit_id=${visitId}`, {
+        const updateResponse = await fetch(`/api/submit/update-photos?visit_id=${visitId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ photo_urls: [] })
@@ -557,7 +526,7 @@ async function uploadPhotosToCloudinary(visitId, cloudName, uploadPreset) {
     // --- PHASE 2b: SEND FINAL URLS TO SERVER ---
     if (statusText) statusText.textContent = 'All photos uploaded. Notifying server of final URLs...';
 
-    const updateResponse = await fetch(`/site-visit/api/submit/update-photos?visit_id=${visitId}`, {
+    const updateResponse = await fetch(`/api/submit/update-photos?visit_id=${visitId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ photo_urls: finalPhotoUrls })
@@ -668,7 +637,7 @@ window.onSubmit = async function(event) {
     try {
         // --- 3. PHASE 1: Submit Metadata to Server & Get CLOUDINARY CONFIG ---
         if (statusText) statusText.textContent = 'Submitting metadata and requesting Cloudinary configuration...';
-        const metadataResponse = await fetch('/site-visit/api/submit/metadata', {
+        const metadataResponse = await fetch('/api/submit/metadata', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payloadData)
@@ -696,7 +665,7 @@ window.onSubmit = async function(event) {
         // --- 5. PHASE 3: Finalize Report & Enqueue PDF Generation on Server ---
         if (statusText) statusText.textContent = 'All photos uploaded. Finalizing report and generating documents...';
 
-        const finalizeResponse = await fetch(`/site-visit/api/submit/finalize?visit_id=${visitId}`, { method: 'GET' });
+        const finalizeResponse = await fetch(`/api/submit/finalize?visit_id=${visitId}`, { method: 'GET' });
         const finalizeResult = await finalizeResponse.json();
 
         if (!finalizeResponse.ok && finalizeResponse.status !== 202) {
@@ -706,7 +675,7 @@ window.onSubmit = async function(event) {
 
         // If server accepted background job
         if (finalizeResponse.status === 202 || finalizeResult.status === 'accepted') {
-            const statusUrl = finalizeResult.status_url || `/site-visit/api/report-status?visit_id=${visitId}`;
+            const statusUrl = finalizeResult.status_url || finalizeResult.status_url || `/api/report-status?visit_id=${visitId}`;
             showNotification('info', 'Report Queued', 'Report generation is running in the background. We will notify when it is ready.');
 
             // Poll the status URL
@@ -797,42 +766,3 @@ window.onSubmit = async function(event) {
         if (statusText) statusText.textContent = 'Submission failed.';
     }
 }
-
-
-/* --- DEBUG / COMPATIBILITY PATCH ---
-   Expose uploadPhotosToCloudinary to the global window object (so it can be
-   called from event handlers or DevTools). Also attach a temporary change
-   listener to the file input to ensure the upload code is triggered during
-   testing. Remove or adjust this patch later if needed.
-*/
-try {
-  if (typeof uploadPhotosToCloudinary === 'function') {
-    window.uploadPhotosToCloudinary = uploadPhotosToCloudinary;
-    console.info('uploadPhotosToCloudinary exposed on window');
-  } else {
-    console.warn('uploadPhotosToCloudinary is not defined in this scope');
-  }
-} catch (err) {
-  console.warn('Error exposing uploadPhotosToCloudinary:', err);
-}
-
-// Temporary listener to help testing: logs file selection and instructs how to call the function.
-(function attachTempFileListener() {
-  try {
-    const fi = document.getElementById('photoInput');
-    if (!fi) return;
-    if (fi.dataset && fi.dataset.tempListenerAttached === 'true') return;
-    fi.addEventListener('change', (e) => {
-      console.info('Temporary file-input change handler invoked, files:', Array.from(fi.files).map(f=>f.name));
-      if (typeof window.uploadPhotosToCloudinary === 'function') {
-        console.info('uploadPhotosToCloudinary is available on window. Call it like: uploadPhotosToCloudinary(visitId, cloudName, uploadPreset)');
-      } else {
-        console.warn('uploadPhotosToCloudinary not available on window yet.');
-      }
-    });
-    if (fi.dataset) fi.dataset.tempListenerAttached = 'true';
-    console.info('Temporary file-input listener attached for testing.');
-  } catch (e) {
-    console.warn('Failed to attach temporary file-input listener:', e);
-  }
-})();

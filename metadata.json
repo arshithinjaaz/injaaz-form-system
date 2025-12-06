@@ -1,0 +1,16 @@
+{
+  "visit_info": {
+    "building_name": "Test Building",
+    "client_name": "ACME",
+    "email": "you@example.com",
+    "technician_name": "Tech One"
+  },
+  "report_items": [
+    {"title": "Item A", "photo_count": 2, "description": "desc"},
+    {"title": "Item B", "photo_count": 1, "description": "desc"}
+  ],
+  "signatures": {
+    "tech_signature": "",
+    "opMan_signature": ""
+  }
+}
