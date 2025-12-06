@@ -91,6 +91,7 @@
                                 <h2 class="text-dark mb-0">Site Visit Report</h2>
                             </div>
                             <div class="col-auto text-end">
+                                <!-- REVERTED: use app-level static route -->
                                 <img src="{{ url_for('static', filename='INJAAZ.png') }}" alt="INJAAZ Logo" class="logo-side">
                             </div>
                         </div>
@@ -238,13 +239,14 @@
         </div>
     </div>
     
+    <!-- Custom Alert Modal (main.js expects these element IDs) -->
     <div class="modal fade" id="customAlertModal" tabindex="-1" aria-labelledby="customAlertTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-start border-5 border-info">
                 <div class="modal-header border-0">
                     <h5 class="modal-title d-flex align-items-center" id="customAlertTitle">
                         <i class="fas fa-2x me-3 fa-circle-info text-info" id="customAlertIcon"></i>
-                        Notification Title
+                        <span id="customAlertTitleText">Notification Title</span>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -258,6 +260,7 @@
         </div>
     </div>
 
+    <!-- Load required scripts: Bootstrap bundle must be loaded before main.js -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script> 

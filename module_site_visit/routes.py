@@ -206,20 +206,36 @@ def finalize_report():
         return jsonify({"error": "Report record not found (Server restarted or session expired)."}), 500
 
     try:
-        visit_info = record['visit_info']
-        final_items = record['report_items']
+        visit_info = record.get('visit_info', {})
+        final_items = record.get('report_items', [])
         final_photo_urls = record.get('photo_urls', [])
+
+        # Normalize visit_info to dict if it's a JSON string or other unexpected type
+        if isinstance(visit_info, str):
+            try:
+                visit_info = json.loads(visit_info)
+            except Exception:
+                # keep safe fallback
+                visit_info = {"raw_visit_info": visit_info}
+
+        if visit_info is None:
+            visit_info = {}
+
         email_recipient = visit_info.get('email')
 
         # Build URL map (keys are tuples)
         url_map = {}
         for url_data in final_photo_urls:
-            key = (url_data['item_index'], url_data['photo_index'])
-            url_map[key] = url_data['photo_url']
+            try:
+                key = (int(url_data.get('item_index', 0)), int(url_data.get('photo_index', 0)))
+                url_map[key] = url_data.get('photo_url')
+            except Exception:
+                # skip malformed entry
+                continue
 
         for item_index, item in enumerate(final_items):
             image_urls = []
-            for photo_index in range(item.get('photo_count', 0)):
+            for photo_index in range(int(item.get('photo_count', 0))):
                 key = (item_index, photo_index)
                 photo_url = url_map.get(key)
                 if photo_url:
@@ -233,6 +249,7 @@ def finalize_report():
         os.makedirs(GENERATED_DIR, exist_ok=True)
 
         # Create Excel synchronously (small/lightweight)
+        # note: create_report_workbook signature expects (output_dir, visit_info, processed_items)
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
 
         # Enqueue background job to generate PDF (and upload/send email)
@@ -277,7 +294,8 @@ def finalize_report():
 
         # Initialize report status in Redis so client can poll
         try:
-            redis_conn.set(f"report:{report_id}", json.dumps({"status": "pending", "job_id": job.get_id()}))
+            if redis_conn is not None:
+                redis_conn.set(f"report:{report_id}", json.dumps({"status": "pending", "job_id": job.get_id()}))
         except Exception as e:
             print(f"WARNING: Could not set initial report status in Redis: {e}")
 
