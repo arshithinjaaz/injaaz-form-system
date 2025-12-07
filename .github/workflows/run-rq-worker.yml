@@ -30,7 +30,8 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
           echo "Starting rq worker in --burst mode (verbose) for 15 minutes"
-          python -m rq worker default -u "$REDIS_URL" --burst -v &
+          # Use python -m rq.worker (or 'rq worker') — python -m rq worker is wrong.
+          python -m rq.worker default -u "$REDIS_URL" --burst -v &
           WORKER_PID=$!
           echo "Worker started with PID $WORKER_PID"
           sleep 900
