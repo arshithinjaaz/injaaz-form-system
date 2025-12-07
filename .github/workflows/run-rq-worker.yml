@@ -1,13 +1,7 @@
-# Debug & run RQ worker on-demand with queue checks and optional test enqueue
 name: Run RQ worker on-demand
 
 on:
   workflow_dispatch:
-    inputs:
-      enqueue_test_job:
-        description: 'Enqueue a safe test job before starting worker? (true/false)'
-        required: false
-        default: 'false'
 
 jobs:
   run-worker:
@@ -30,49 +24,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install project package (editable) if possible
-        run: |
-          if [ -f pyproject.toml ] || [ -f setup.py ]; then
-            pip install -e .
-          else
-            echo "No pyproject.toml or setup.py found; skipped pip install -e ."
-          fi
-
-      - name: Show Redis queue state and optionally enqueue a safe test job
-        shell: bash
-        env:
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          ENQUEUE_TEST_JOB: ${{ github.event.inputs.enqueue_test_job }}
-        run: |
-          # Run a compact Python one-liner to print keys and queue length and optionally enqueue a test job.
-          python -c 'import os, json; \
-from redis import Redis; from rq import Queue; \
-url=os.environ.get("REDIS_URL"); \
-if not url: print("No REDIS_URL provided; aborting"); raise SystemExit(1); \
-conn=Redis.from_url(url, socket_connect_timeout=5, decode_responses=True); \
-try: keys=conn.keys("rq:*")[:50]; except Exception as e: keys=f"keys-error:{e}"; \
-try: qlen=conn.llen("rq:queue:default"); except Exception as e: qlen=f"llen-error:{e}"; \
-print("Sample keys (rq:*):", keys); print("default queue length:", qlen); \
-enqueue=os.environ.get("ENQUEUE_TEST_JOB","false").lower() in ("1","true","yes"); \
-if enqueue: \
-    try: q=Queue("default", connection=conn); job=q.enqueue("builtins.print","hello from test job (from workflow)"); print("Enqueued test job id:", job.id); \
-    except Exception as e: print("Failed to enqueue test job:", e)'
-
       - name: Run rq worker in burst (process queued jobs then exit)
         shell: bash
         env:
           REDIS_URL: ${{ secrets.REDIS_URL }}
-          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
-          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
-          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: |
-          echo "Starting rq worker in --burst mode (verbose) for 10 minutes"
+          echo "Starting rq worker in --burst mode (verbose) for 15 minutes"
           python -m rq worker default -u "$REDIS_URL" --burst -v &
           WORKER_PID=$!
           echo "Worker started with PID $WORKER_PID"
-          sleep 600
+          sleep 900
           echo "Stopping worker (PID $WORKER_PID)"
           kill -SIGTERM $WORKER_PID || true
           wait $WORKER_PID || true
