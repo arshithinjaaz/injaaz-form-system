@@ -39,6 +39,7 @@ jobs:
           fi
 
       - name: Show Redis queue state and optionally enqueue a safe test job
+        shell: bash
         env:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           ENQUEUE_TEST_JOB: ${{ github.event.inputs.enqueue_test_job }}
@@ -53,10 +54,10 @@ if not url:
     print("No REDIS_URL provided; aborting")
     raise SystemExit(1)
 
-# connect (with short connect timeout)
+# connect with a short timeout
 conn = Redis.from_url(url, socket_connect_timeout=5, decode_responses=True)
 
-# print some diagnostic info
+# print diagnostic info
 try:
     keys = conn.keys('rq:*')
 except Exception as e:
@@ -83,6 +84,7 @@ if enqueue:
 PY
 
       - name: Run rq worker in burst (process queued jobs then exit)
+        shell: bash
         env:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
@@ -92,11 +94,11 @@ PY
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: |
           echo "Starting rq worker in --burst mode (verbose) for 10 minutes"
-          # start worker in background so we can stop it after N seconds
+          # start the worker in background so we can stop it after N seconds
           python -m rq worker default -u "$REDIS_URL" --burst -v &
           WORKER_PID=$!
           echo "Worker started with PID $WORKER_PID"
-          # let the worker run (adjust below if you want more/less time)
+          # let the worker run (600s = 10 minutes)
           sleep 600
           echo "Stopping worker (PID $WORKER_PID)"
           kill -SIGTERM $WORKER_PID || true
