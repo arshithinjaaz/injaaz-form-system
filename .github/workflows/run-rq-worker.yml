@@ -1,4 +1,4 @@
-# .github/workflows/run-rq-worker.yml (replace relevant steps)
+# url=https://github.com/<owner>/<repo>/blob/main/.github/workflows/run-rq-worker.yml
 name: Run RQ worker on-demand
 
 on:
@@ -7,7 +7,10 @@ on:
 jobs:
   run-worker:
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # increase if jobs may take longer
+    timeout-minutes: 30
+    env:
+      # ensure python can import from the repo workspace root
+      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - name: Checkout
@@ -21,31 +24,38 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # install full project deps so worker can run job code
           pip install -r requirements.txt
+
+      - name: Install project package (editable) if possible
+        # If your repo has pyproject.toml or setup.py this installs the package so imports work.
+        run: |
+          if [ -f pyproject.toml ] || [ -f setup.py ]; then
+            pip install -e .
+          else
+            echo "No pyproject.toml or setup.py found; skipped pip install -e ."
+          fi
 
       - name: Verify Redis connectivity (debug)
         env:
           REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
           python - <<'PY'
-          import os, sys
-          try:
-              import redis
-              url = os.environ.get('REDIS_URL', '')
-              print("REDIS_URL:", url[:60] + ("..." if len(url)>60 else ""))
-              if not url:
-                  print("No REDIS_URL provided")
-                  sys.exit(2)
-              r = redis.from_url(url, socket_connect_timeout=5, decode_responses=True)
-              print("Trying PING ...")
-              ok = r.ping()
-              print("PING response:", ok)
-              sys.exit(0 if ok else 3)
-          except Exception as e:
-              print("REDIS connectivity check FAILED:", repr(e))
-              sys.exit(4)
-          PY
+import os, traceback
+try:
+    import redis
+    url = os.environ.get('REDIS_URL','')
+    print("REDIS_URL (head):", url[:70] + ("..." if len(url)>70 else ""))
+    if not url:
+        raise SystemExit("No REDIS_URL provided")
+    r = redis.from_url(url, socket_connect_timeout=7, decode_responses=True)
+    print("Trying PING ...")
+    ok = r.ping()
+    print("PING response:", ok)
+except Exception:
+    print("REDIS connectivity check FAILED")
+    traceback.print_exc()
+    raise
+PY
 
       - name: Run rq worker in burst (process queued jobs then exit)
         env:
@@ -56,7 +66,6 @@ jobs:
           CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: |
-          echo "Starting rq worker in --burst mode (will process jobs and exit)."
-          # verbose (-v) makes RQ print more info; --burst makes worker exit when queue is empty
-          rq worker default -u "$REDIS_URL" --burst -v
-          echo "rq worker process finished."
+          echo "Starting rq worker in --burst mode (verbose)"
+          python -m rq worker default -u "$REDIS_URL" --burst -v
+          echo "rq worker finished"
