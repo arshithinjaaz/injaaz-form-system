@@ -44,48 +44,19 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           ENQUEUE_TEST_JOB: ${{ github.event.inputs.enqueue_test_job }}
         run: |
-          # create a temporary python script to run diagnostics
-          cat > /tmp/check_queue.py <<'PY'
-import os
-from redis import Redis
-from rq import Queue
-
-url = os.environ.get("REDIS_URL")
-if not url:
-    print("No REDIS_URL provided; aborting")
-    raise SystemExit(1)
-
-# connect with a short timeout
-conn = Redis.from_url(url, socket_connect_timeout=5, decode_responses=True)
-
-# print diagnostic info
-try:
-    keys = conn.keys('rq:*')
-except Exception as e:
-    print("Failed to list keys:", e)
-    keys = []
-print("Sample keys (rq:*):", keys[:50])
-
-try:
-    qlen = conn.llen('rq:queue:default')
-except Exception as e:
-    print("Failed to read queue length:", e)
-    qlen = '<error>'
-print("default queue length:", qlen)
-
-# optionally enqueue a safe test job
-enqueue = os.environ.get("ENQUEUE_TEST_JOB", "false").lower() in ("1","true","yes")
-if enqueue:
-    try:
-        q = Queue('default', connection=conn)
-        job = q.enqueue('builtins.print', 'hello from test job (from workflow)')
-        print("Enqueued test job id:", job.id)
-    except Exception as e:
-        print("Failed to enqueue test job:", e)
-PY
-          # run the temp script and remove it
-          python /tmp/check_queue.py
-          rm -f /tmp/check_queue.py
+          # Run a compact Python one-liner to print keys and queue length and optionally enqueue a test job.
+          python -c 'import os, json; \
+from redis import Redis; from rq import Queue; \
+url=os.environ.get("REDIS_URL"); \
+if not url: print("No REDIS_URL provided; aborting"); raise SystemExit(1); \
+conn=Redis.from_url(url, socket_connect_timeout=5, decode_responses=True); \
+try: keys=conn.keys("rq:*")[:50]; except Exception as e: keys=f"keys-error:{e}"; \
+try: qlen=conn.llen("rq:queue:default"); except Exception as e: qlen=f"llen-error:{e}"; \
+print("Sample keys (rq:*):", keys); print("default queue length:", qlen); \
+enqueue=os.environ.get("ENQUEUE_TEST_JOB","false").lower() in ("1","true","yes"); \
+if enqueue: \
+    try: q=Queue("default", connection=conn); job=q.enqueue("builtins.print","hello from test job (from workflow)"); print("Enqueued test job id:", job.id); \
+    except Exception as e: print("Failed to enqueue test job:", e)'
 
       - name: Run rq worker in burst (process queued jobs then exit)
         shell: bash
