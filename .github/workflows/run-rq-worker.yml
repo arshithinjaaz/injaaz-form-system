@@ -44,7 +44,8 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           ENQUEUE_TEST_JOB: ${{ github.event.inputs.enqueue_test_job }}
         run: |
-          python - <<'PY'
+          # create a temporary python script to run diagnostics
+          cat > /tmp/check_queue.py <<'PY'
 import os
 from redis import Redis
 from rq import Queue
@@ -82,6 +83,9 @@ if enqueue:
     except Exception as e:
         print("Failed to enqueue test job:", e)
 PY
+          # run the temp script and remove it
+          python /tmp/check_queue.py
+          rm -f /tmp/check_queue.py
 
       - name: Run rq worker in burst (process queued jobs then exit)
         shell: bash
@@ -94,11 +98,9 @@ PY
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: |
           echo "Starting rq worker in --burst mode (verbose) for 10 minutes"
-          # start the worker in background so we can stop it after N seconds
           python -m rq worker default -u "$REDIS_URL" --burst -v &
           WORKER_PID=$!
           echo "Worker started with PID $WORKER_PID"
-          # let the worker run (600s = 10 minutes)
           sleep 600
           echo "Stopping worker (PID $WORKER_PID)"
           kill -SIGTERM $WORKER_PID || true
