@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # install project deps if you have a requirements file, otherwise install minimal deps
+          # prefer project requirements if present, otherwise ensure rq & redis are available
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
@@ -34,14 +34,7 @@ jobs:
         env:
           REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
-          echo "Starting rq worker in --burst mode (verbose) for 10 minutes"
-          # Use python -m rq.worker (correct) so module runs properly
-          python -m rq.worker default -u "$REDIS_URL" --burst -v &
-          WORKER_PID=$!
-          echo "Worker started with PID $WORKER_PID"
-          # let the worker run long enough to pick jobs (adjust as needed)
-          sleep 600
-          echo "Stopping worker (PID $WORKER_PID)"
-          kill -SIGTERM $WORKER_PID || true
-          wait $WORKER_PID || true
+          echo "Starting rq worker in --burst mode (verbose) for 10 minutes (foreground)"
+          # use console script 'rq' (avoids runpy warning) and run in foreground with timeout
+          timeout 600s rq worker default -u "$REDIS_URL" --burst -v || true
           echo "rq worker finished"
