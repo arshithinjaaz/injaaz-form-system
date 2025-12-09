@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "injaaz"
+version = "0.1.0"
+description = "Injaaz Form System - forms, Cloudinary & Redis/RQ"
+dependencies = [
+  "Flask>=2.2",
+  "python-dotenv",
+  "cloudinary>=1.44.1",
+  "redis>=4.0",
+  "rq>=1.10",
+  "gunicorn",
+  "requests",
+  "packaging",
+]

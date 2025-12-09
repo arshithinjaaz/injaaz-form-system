@@ -1,12 +1,10 @@
-# config.py
-
 import os
+from dotenv import load_dotenv
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# --- GLOBAL PATH CONFIGURATION ---
-GENERATED_DIR_NAME = "generated"
-GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
-
-# Path for data (Used by the form module to read JSON)
-DROPDOWN_DATA_PATH = os.path.join(BASE_DIR, 'data', 'dropdown_data.json')
+def load_config(app):
+    # load .env from repo root
+    load_dotenv(dotenv_path=os.path.join(os.getcwd(), ".env"))
+    app.config['CLOUDINARY_URL'] = os.environ.get('CLOUDINARY_URL')
+    app.config['REDIS_URL'] = os.environ.get('REDIS_URL')
+    app.config['RQ_DEFAULT_QUEUE'] = os.environ.get('RQ_DEFAULT_QUEUE', 'default')
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', app.config.get('SECRET_KEY'))
