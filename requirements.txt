@@ -9,4 +9,4 @@ requests
 cloudinary
 xlsxwriter
 redis>=4.5.5
-rq>=1.1.0
+rq
