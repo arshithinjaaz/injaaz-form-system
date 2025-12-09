@@ -3,3 +3,10 @@ gunicorn
 openpyxl
 reportlab
 pandas
+Pillow
+boto3
+requests
+cloudinary
+xlsxwriter
+redis>=4.5.5
+rq
