@@ -2,7 +2,7 @@
 module_site_visit.utils.cloudinary_version
 
 Robust helper to return the installed cloudinary package version.
-Use this instead of accessing get_cloudinary_version() directly.
+Use this instead of accessing cloudinary.version directly.
 """
 try:
     # Python 3.8+
@@ -24,7 +24,6 @@ def get_cloudinary_version():
     # Fallback: read known attributes from the module
     try:
         import cloudinary
-from module_site_visit.utils.cloudinary_version import get_cloudinary_version
         return getattr(cloudinary, '__version__', None) or getattr(cloudinary, 'VERSION', None)
     except Exception:
         return None
