@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=${REDIS_URL}
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    command: rq worker -u ${REDIS_URL} default
+
+volumes:
+  redis-data:
