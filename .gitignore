@@ -1,24 +1,30 @@
-# Python standard
+# Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.Python
 
-# Virtualenv
-.venv/
+# Virtualenvs
 venv/
+.venv/
 
-# dotenv
+# Environment / secrets (do not commit .env)
 .env
 .env.*
 
-# Generated files
-generated/
-generated/images/
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
 
-# Redis dump (should not be in git)
+# Docker / build artifacts
+*.log
+docker-compose.override.yml
+
+# App-generated
+generated/
+uploads/
 dump.rdb
 
-# Git
-.git
+# Misc stray files
+null
+bject -Unique  Set-Content .gitignore
