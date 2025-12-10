@@ -22,8 +22,7 @@ from .utils.email_sender import send_outlook_email
 from .utils.excel_writer import create_report_workbook
 # IMPORTANT: pdf_generator is updated to stream URLs rather than expect local files
 from .utils.pdf_generator import generate_visit_pdf
-# background task function (we still import on-demand where needed)
-# from .utils.tasks import generate_and_send_report
+# Note: background task will be imported on-demand where required
 
 # --- CONFIGURATION (Loaded from environment variables; DO NOT hardcode secrets in production) ---
 CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'render_site_upload')
@@ -156,6 +155,7 @@ def get_report_state(report_id):
             record = json.load(f)
         return record
     finally:
+        # Keep behavior consistent with original: remove after reading
         if os.path.exists(temp_record_path):
             os.remove(temp_record_path)
 
@@ -199,34 +199,61 @@ def get_dropdown_data():
 # 3. Metadata submit route (uploads signatures)
 @site_visit_bp.route('/api/submit/metadata', methods=['POST'])
 def submit_metadata():
+    """
+    Accepts visit metadata + signatures. Returns a visit_id and cloudinary info
+    that the client uses to upload photos/signatures. This version is robust
+    when Cloudinary env vars are missing: it still returns a visit_id and the
+    cloudinary_cloud_name field (possibly empty), so the client can handle it.
+    """
     try:
-        data = request.json
+        data = request.json or {}
         visit_info = data.get('visit_info', {})
         processed_items = data.get('report_items', [])
         signatures = data.get('signatures', {})
 
-        tech_sig_url = upload_base64_to_cloudinary(signatures.get('tech_signature'), 'tech_sig')
-        opMan_sig_url = upload_base64_to_cloudinary(signatures.get('opMan_signature'), 'opman_sig')
+        # Create a stable visit id regardless of Cloudinary availability
+        report_id = f"report-{int(time.time())}"
+
+        # Attempt signature uploads if Cloudinary is configured
+        tech_sig = signatures.get('tech_signature')
+        opman_sig = signatures.get('opMan_signature')
+
+        tech_sig_url = None
+        opMan_sig_url = None
+
+        try:
+            if init_cloudinary():
+                tech_sig_url = upload_base64_to_cloudinary(tech_sig, 'tech_sig') if tech_sig else None
+                opMan_sig_url = upload_base64_to_cloudinary(opman_sig, 'opman_sig') if opman_sig else None
+            else:
+                logger.warning("Cloudinary not configured; signature uploads skipped.")
+        except Exception as e:
+            logger.exception("Signature upload attempt failed: %s", e)
 
         visit_info['tech_signature_url'] = tech_sig_url
         visit_info['opMan_signature_url'] = opMan_sig_url
 
-        report_id = f"report-{int(time.time())}"
-
+        # Persist minimal state for later steps
         save_report_state(report_id, {
             'visit_info': visit_info,
             'report_items': processed_items,
             'photo_urls': []
         })
 
+        # Always return cloudinary fields (possibly empty) and visit id so front-end can proceed
+        cloudinary_name = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
+        upload_preset = os.environ.get('CLOUDINARY_UPLOAD_PRESET', CLOUDINARY_UPLOAD_PRESET)
+
         return jsonify({
             "status": "success",
             "visit_id": report_id,
-            "cloudinary_upload_preset": os.environ.get('CLOUDINARY_UPLOAD_PRESET', CLOUDINARY_UPLOAD_PRESET),
+            "cloudinary_cloud_name": cloudinary_name,
+            "cloudinary_upload_preset": upload_preset,
         })
+
     except Exception as e:
         error_details = traceback.format_exc()
-        logger.exception(f"ERROR (Metadata): {error_details}")
+        logger.exception("ERROR (Metadata): %s", error_details)
         return jsonify({"error": f"Failed to process metadata: {str(e)}"}), 500
 
 # 4. Update photos route (receives client-side uploaded Cloudinary URLs)
