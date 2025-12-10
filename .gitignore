@@ -1,2 +1,24 @@
+# Python standard
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtualenv
+.venv/
+venv/
+
+# dotenv
 .env
 .env.*
+
+# Generated files
+generated/
+generated/images/
+
+# Redis dump (should not be in git)
+dump.rdb
+
+# Git
+.git
