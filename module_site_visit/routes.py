@@ -1,4 +1,5 @@
-import os, logging
+import os
+import logging
 import json
 import time
 import traceback
@@ -6,82 +7,125 @@ import tempfile
 from datetime import datetime
 from flask import Blueprint, render_template, jsonify, request, url_for, send_from_directory
 
-# NEW: Import the Cloudinary SDK
+# Cloudinary SDK (we'll initialize lazily)
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 
-# NEW: Redis + RQ for background jobs
+# Redis + RQ (initialized lazily)
 import redis
 from rq import Queue
 from redis.exceptions import RedisError
-import redis
 
 # --- CORE IMPORTS ---
-# Assuming these are relative imports from the module's sub-directories
 from .utils.email_sender import send_outlook_email
 from .utils.excel_writer import create_report_workbook
 # IMPORTANT: pdf_generator is updated to stream URLs rather than expect local files
 from .utils.pdf_generator import generate_visit_pdf
+# background task function (we still import on-demand where needed)
+# from .utils.tasks import generate_and_send_report
 
 # --- CONFIGURATION (Loaded from environment variables; DO NOT hardcode secrets in production) ---
-CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
-CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')
-CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '')
 CLOUDINARY_UPLOAD_PRESET = os.environ.get('CLOUDINARY_UPLOAD_PRESET', 'render_site_upload')
-
-# Redis / RQ config
-REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 
 logger = logging.getLogger(__name__)
 
-REDIS_URL = os.environ.get('REDIS_URL')
-if not REDIS_URL:
-    logger.warning("REDIS_URL is not set. Background jobs will not run.")
-else:
+# NOTE: Do not perform network connections at import time.
+# Instead, define lazy initializer / getter functions below.
+
+def init_cloudinary():
+    """
+    Lazily configure Cloudinary. Safe to call multiple times.
+    Returns True if configured, False otherwise.
+    """
+    if getattr(init_cloudinary, "_configured", None) is not None:
+        return init_cloudinary._configured
+
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
+    api_key = os.environ.get('CLOUDINARY_API_KEY', '')
+    api_secret = os.environ.get('CLOUDINARY_API_SECRET', '')
+
+    if not cloud_name or not api_key or not api_secret:
+        logger.warning("Cloudinary env vars missing; server-side uploads will likely fail.")
+        init_cloudinary._configured = False
+        return False
+
     try:
-        redis_conn = redis.from_url(REDIS_URL, socket_connect_timeout=5, decode_responses=True)
-        redis_conn.ping()
-        logger.info(f"Connected to Redis host: {REDIS_URL.split('@')[-1]}")
+        cloudinary.config(
+            cloud_name=cloud_name,
+            api_key=api_key,
+            api_secret=api_secret
+        )
+        init_cloudinary._configured = True
+        logger.info("Cloudinary initialized.")
+        return True
+    except Exception:
+        logger.exception("Cloudinary initialization failed.")
+        init_cloudinary._configured = False
+        return False
+
+def get_redis_conn():
+    """
+    Lazily return a Redis connection (cached). Returns None if not available.
+    Safe to call multiple times.
+    """
+    if getattr(get_redis_conn, "_conn", None) is not None:
+        return get_redis_conn._conn
+
+    redis_url = os.environ.get('REDIS_URL')
+    if not redis_url:
+        logger.warning("REDIS_URL not set; background jobs will not run.")
+        get_redis_conn._conn = None
+        return None
+
+    try:
+        conn = redis.from_url(redis_url, socket_connect_timeout=5, decode_responses=True)
+        # Try a quick ping to validate connectivity
+        conn.ping()
+        get_redis_conn._conn = conn
+        logger.info(f"Connected to Redis: {redis_url.split('@')[-1] if '@' in redis_url else redis_url}")
+        return conn
     except RedisError:
-        logger.exception("Failed to connect to Redis. Check REDIS_URL and network connectivity.")
-        redis_conn = None
+        logger.exception("Failed to connect to Redis (lazy init). Background jobs disabled.")
+        get_redis_conn._conn = None
+        return None
+    except Exception:
+        logger.exception("Unexpected error connecting to Redis.")
+        get_redis_conn._conn = None
+        return None
 
-# Validate config
-if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_API_KEY or not CLOUDINARY_API_SECRET:
-    print("WARNING: One or more Cloudinary environment variables are not set. "
-          "Server-side Cloudinary upload may fail. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.")
+def get_rq_queue():
+    """
+    Lazily return an RQ Queue bound to the Redis connection, or None if Redis unavailable.
+    """
+    if getattr(get_rq_queue, "_queue", None) is not None:
+        return get_rq_queue._queue
 
-# Initialize Cloudinary (required for server-side upload of signatures)
-try:
-    cloudinary.config(
-        cloud_name=CLOUDINARY_CLOUD_NAME,
-        api_key=CLOUDINARY_API_KEY,
-        api_secret=CLOUDINARY_API_SECRET
-    )
-    print("Cloudinary configuration applied.")
-except Exception as e:
-    print(f"CRITICAL ERROR: Cloudinary initialization failed: {e}")
+    conn = get_redis_conn()
+    if conn is None:
+        get_rq_queue._queue = None
+        return None
 
-# Initialize Redis connection and RQ queue
-try:
-    redis_conn = redis.from_url(REDIS_URL, decode_responses=True)
-    q = Queue('default', connection=redis_conn)
-    print("Connected to Redis for background jobs.")
-except Exception as e:
-    redis_conn = None
-    q = None
-    print(f"WARNING: Could not connect to Redis at {REDIS_URL}: {e}")
+    try:
+        q = Queue('default', connection=conn)
+        get_rq_queue._queue = q
+        return q
+    except Exception:
+        logger.exception("Failed to create RQ queue with Redis connection.")
+        get_rq_queue._queue = None
+        return None
 
-# =================================================================
-# --- CLOUDINARY SIGNATURE UPLOAD UTILITY ---
-# =================================================================
+# --- Utility: Cloudinary upload helper that uses lazy init
 def upload_base64_to_cloudinary(base64_string, public_id_prefix):
     """
     Uploads a base64 string (signature) directly to Cloudinary and returns the secure URL.
     Accepts data URI (data:image/png;base64,....) or raw base64.
     """
     if not base64_string:
+        return None
+
+    if not init_cloudinary():
+        logger.warning("Cloudinary not configured; skipping upload.")
         return None
 
     try:
@@ -92,20 +136,18 @@ def upload_base64_to_cloudinary(base64_string, public_id_prefix):
         )
         return upload_result.get('secure_url')
     except Exception as e:
-        print(f"ERROR: Cloudinary signature upload failed for {public_id_prefix}: {e}")
+        logger.exception(f"Cloudinary signature upload failed for {public_id_prefix}: {e}")
         return None
 
 # =================================================================
 # --- TEMPORARY STATE MANAGEMENT (Placeholder) ---
 # =================================================================
 def save_report_state(report_id, data):
-    """Saves report state (placeholder using temp files)."""
     temp_record_path = os.path.join(tempfile.gettempdir(), f"{report_id}.json")
     with open(temp_record_path, 'w') as f:
         json.dump(data, f)
 
 def get_report_state(report_id):
-    """Retrieves and deletes report state (placeholder using temp files)."""
     temp_record_path = os.path.join(tempfile.gettempdir(), f"{report_id}.json")
     if not os.path.exists(temp_record_path):
         return None
@@ -148,10 +190,10 @@ def get_dropdown_data():
             data = json.load(f)
         return jsonify(data)
     except FileNotFoundError:
-        print(f"ERROR: Dropdown data file not found at: {DROPDOWN_DATA_PATH}")
+        logger.error(f"Dropdown data file not found at: {DROPDOWN_DATA_PATH}")
         return jsonify({"error": "Dropdown data file not found"}), 404
     except json.JSONDecodeError:
-        print(f"ERROR: Could not decode JSON data in: {DROPDOWN_DATA_PATH}")
+        logger.error(f"Could not decode JSON: {DROPDOWN_DATA_PATH}")
         return jsonify({"error": "Invalid JSON data"}), 500
 
 # 3. Metadata submit route (uploads signatures)
@@ -180,12 +222,11 @@ def submit_metadata():
         return jsonify({
             "status": "success",
             "visit_id": report_id,
-            "cloudinary_cloud_name": CLOUDINARY_CLOUD_NAME,
-            "cloudinary_upload_preset": CLOUDINARY_UPLOAD_PRESET,
+            "cloudinary_upload_preset": os.environ.get('CLOUDINARY_UPLOAD_PRESET', CLOUDINARY_UPLOAD_PRESET),
         })
     except Exception as e:
         error_details = traceback.format_exc()
-        print(f"ERROR (Metadata): {error_details}")
+        logger.exception(f"ERROR (Metadata): {error_details}")
         return jsonify({"error": f"Failed to process metadata: {str(e)}"}), 500
 
 # 4. Update photos route (receives client-side uploaded Cloudinary URLs)
@@ -207,7 +248,7 @@ def update_photos():
         return jsonify({"status": "success"})
     except Exception as e:
         error_details = traceback.format_exc()
-        print(f"ERROR (Update Photos): {error_details}")
+        logger.exception(f"ERROR (Update Photos): {error_details}")
         return jsonify({"error": f"Failed to update photo URLs: {str(e)}"}), 500
 
 # 5. Finalize and generate report (enqueue background job for PDF + Excel + email)
@@ -226,12 +267,11 @@ def finalize_report():
         final_items = record.get('report_items', [])
         final_photo_urls = record.get('photo_urls', [])
 
-        # Normalize visit_info to dict if it's a JSON string or other unexpected type
+        # Normalize visit_info
         if isinstance(visit_info, str):
             try:
                 visit_info = json.loads(visit_info)
             except Exception:
-                # keep safe fallback
                 visit_info = {"raw_visit_info": visit_info}
 
         if visit_info is None:
@@ -239,14 +279,13 @@ def finalize_report():
 
         email_recipient = visit_info.get('email')
 
-        # Build URL map (keys are tuples)
+        # Build URL map
         url_map = {}
         for url_data in final_photo_urls:
             try:
                 key = (int(url_data.get('item_index', 0)), int(url_data.get('photo_index', 0)))
                 url_map[key] = url_data.get('photo_url')
             except Exception:
-                # skip malformed entry
                 continue
 
         for item_index, item in enumerate(final_items):
@@ -257,33 +296,33 @@ def finalize_report():
                 if photo_url:
                     image_urls.append(photo_url)
                 else:
-                    print(f"WARNING: Missing photo URL for item {item_index}, photo {photo_index}. Key: {key}")
+                    logger.warning(f"Missing photo URL for item {item_index}, photo {photo_index}. Key: {key}")
 
             item['image_urls'] = image_urls
             item.pop('photo_count', None)
 
         os.makedirs(GENERATED_DIR, exist_ok=True)
 
-        # Create Excel synchronously (small/lightweight)
-        # note: create_report_workbook signature expects (output_dir, visit_info, processed_items)
+        # Create Excel synchronously
         excel_path, excel_filename = create_report_workbook(GENERATED_DIR, visit_info, final_items)
 
-        # Enqueue background job to generate PDF (and upload/send email)
+        # Attempt to get an RQ queue lazily
+        q = get_rq_queue()
+
         if q is None:
-            # If Redis/RQ not configured, fall back to synchronous generation (not recommended in production)
-            print("WARNING: Redis/RQ not available. Generating PDF synchronously (may time out).")
+            # Fallback: synchronous generation (not ideal in production)
+            logger.warning("Redis/RQ not available. Generating PDF synchronously.")
             pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
 
-            # Try sending email synchronously as before
             subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')} - {datetime.now().strftime('%Y-%m-%d')}"
             body = f"The site visit report for {visit_info.get('building_name', 'Unknown')} on {datetime.now().strftime('%Y-%m-%d')} has been generated and is attached."
 
             attachments = [p for p in [excel_path, pdf_path] if p and os.path.exists(p)]
             try:
                 email_status, msg = send_outlook_email(subject, body, attachments, email_recipient)
-                print("EMAIL_STATUS:", msg)
+                logger.info("EMAIL_STATUS: %s", msg)
             except Exception as e:
-                print(f"WARNING: Email sending failed in synchronous fallback: {e}")
+                logger.exception("Email sending failed in synchronous fallback: %s", e)
 
             return jsonify({
                 "status": "success",
@@ -291,29 +330,33 @@ def finalize_report():
                 "pdf_url": url_for('site_visit_bp.download_generated', filename=pdf_filename, _external=True)
             })
 
-        # Import the background task function (must exist at module_site_visit.utils.tasks.generate_and_send_report)
+        # Enqueue job if queue is available
         try:
             from .utils.tasks import generate_and_send_report
-        except Exception as e:
-            print(f"CRITICAL ERROR: Could not import background task generate_and_send_report: {e}")
+        except Exception:
+            logger.exception("CRITICAL ERROR: Could not import background task generate_and_send_report.")
             raise
 
-        # Enqueue the job. job_timeout should be tuned for your expected workload.
-        job = q.enqueue(
-            generate_and_send_report,
-            report_id,
-            visit_info,
-            final_items,
-            GENERATED_DIR,
-            job_timeout=1800  # 30 minutes
-        )
-
-        # Initialize report status in Redis so client can poll
         try:
-            if redis_conn is not None:
-                redis_conn.set(f"report:{report_id}", json.dumps({"status": "pending", "job_id": job.get_id()}))
-        except Exception as e:
-            print(f"WARNING: Could not set initial report status in Redis: {e}")
+            job = q.enqueue(
+                generate_and_send_report,
+                report_id,
+                visit_info,
+                final_items,
+                GENERATED_DIR,
+                job_timeout=1800  # 30 minutes
+            )
+        except Exception:
+            logger.exception("Failed to enqueue generate_and_send_report job.")
+            raise
+
+        # Store initial status in Redis if available
+        conn = get_redis_conn()
+        try:
+            if conn is not None:
+                conn.set(f"report:{report_id}", json.dumps({"status": "pending", "job_id": job.get_id()}))
+        except Exception:
+            logger.exception("Could not set initial report status in Redis.")
 
         return jsonify({
             "status": "accepted",
@@ -324,7 +367,7 @@ def finalize_report():
 
     except Exception as e:
         error_details = traceback.format_exc()
-        print(f"ERROR (Finalize): {error_details}")
+        logger.exception(f"ERROR (Finalize): {error_details}")
         return jsonify({
             "status": "error",
             "error": f"Internal server error: Failed to process report. Reason: {type(e).__name__}: {str(e)}"
@@ -333,18 +376,16 @@ def finalize_report():
 # 6. Report status endpoint to poll background job progress/result
 @site_visit_bp.route('/api/report-status', methods=['GET'])
 def report_status():
-    """
-    Query Redis for the report status and return it. Expects ?visit_id=<visit_id>
-    """
     visit_id = request.args.get('visit_id')
     if not visit_id:
         return jsonify({"error": "Missing visit_id"}), 400
 
-    if redis_conn is None:
+    conn = get_redis_conn()
+    if conn is None:
         return jsonify({"status": "error", "message": "Redis not configured on server."}), 500
 
     key = f"report:{visit_id}"
-    result = redis_conn.get(key)
+    result = conn.get(key)
     if not result:
         return jsonify({"status": "unknown", "message": "No record found. The job may not have been started."}), 404
 
@@ -352,7 +393,6 @@ def report_status():
         data = json.loads(result)
         return jsonify({"status": "ok", "report": data})
     except Exception:
-        # If stored value is already a JSON string but parsing failed, return raw
         return jsonify({"status": "ok", "report_raw": result})
 
 # 7. Serve generated files

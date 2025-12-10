@@ -1,15 +1,31 @@
-# Example wsgi.py — make sure gunicorn loads `app`
-# Adjust the import path if your app object is defined elsewhere.
+from flask import Flask, jsonify
+import sys, traceback
 
-from Injaaz import app  # if your Flask app instance is created in Injaaz.py
-from flask import redirect, url_for, jsonify
+try:
+    # Try to import the main Flask app (the app object must be named "app")
+    from Injaaz import app  # repo: Injaaz.py defines "app"
+except Exception:
+    # If import fails, log the full traceback to stderr (Render logs will show it)
+    tb = traceback.format_exc()
+    print("ERROR importing Injaaz.app:\n", tb, file=sys.stderr)
 
-# Provide / (root) -> redirect to /health (avoids a 404)
-@app.route("/")
-def index():
-    return redirect(url_for("health"))
+    # Provide a minimal fallback app so Gunicorn can start and serve diagnostics
+    _fallback = Flask(__name__)
 
-# Ensure /health exists and returns JSON 200
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok"})
+    @_fallback.route("/health")
+    def health():
+        # Return a 500-ish status so health checks indicate an issue,
+        # but keep a JSON body for quick verification in browser.
+        return jsonify({
+            "status": "error",
+            "message": "Application import failed. Check logs for details."
+        }), 500
+
+    @_fallback.route("/")
+    def index():
+        return jsonify({
+            "status": "error",
+            "message": "Application import failed. Check logs."
+        }), 500
+
+    app = _fallback
