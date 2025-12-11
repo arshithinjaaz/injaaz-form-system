@@ -17,6 +17,9 @@ import redis
 from rq import Queue
 from redis.exceptions import RedisError
 
+# Threading for local fallback background execution
+import threading
+
 # --- CORE IMPORTS ---
 from .utils.email_sender import send_outlook_email
 from .utils.excel_writer import create_report_workbook
@@ -337,25 +340,39 @@ def finalize_report():
         q = get_rq_queue()
 
         if q is None:
-            # Fallback: synchronous generation (not ideal in production)
-            logger.warning("Redis/RQ not available. Generating PDF synchronously.")
-            pdf_path, pdf_filename = generate_visit_pdf(visit_info, final_items, GENERATED_DIR)
-
-            subject = f"INJAAZ Site Visit Report for {visit_info.get('building_name', 'Unknown')} - {datetime.now().strftime('%Y-%m-%d')}"
-            body = f"The site visit report for {visit_info.get('building_name', 'Unknown')} on {datetime.now().strftime('%Y-%m-%d')} has been generated and is attached."
-
-            attachments = [p for p in [excel_path, pdf_path] if p and os.path.exists(p)]
+            # Redis/RQ is not available: spawn a local background thread to avoid blocking the request.
+            logger.warning("Redis/RQ not available. Spawning local background thread for report generation (non-blocking).")
             try:
-                email_status, msg = send_outlook_email(subject, body, attachments, email_recipient)
-                logger.info("EMAIL_STATUS: %s", msg)
-            except Exception as e:
-                logger.exception("Email sending failed in synchronous fallback: %s", e)
+                from .utils.tasks import generate_and_send_report
 
-            return jsonify({
-                "status": "success",
-                "excel_url": url_for('site_visit_bp.download_generated', filename=excel_filename, _external=True),
-                "pdf_url": url_for('site_visit_bp.download_generated', filename=pdf_filename, _external=True)
-            })
+                worker_thread = threading.Thread(
+                    target=generate_and_send_report,
+                    args=(report_id, visit_info, final_items, GENERATED_DIR),
+                    daemon=True
+                )
+                worker_thread.start()
+
+                # Initialize report status in Redis if available (best-effort)
+                conn = get_redis_conn()
+                try:
+                    if conn is not None:
+                        conn.set(f"report:{report_id}", json.dumps({"status": "pending", "started_at": datetime.utcnow().isoformat()}))
+                except Exception:
+                    logger.exception("Could not set initial report status in Redis for threaded fallback.")
+
+                return jsonify({
+                    "status": "accepted",
+                    "visit_id": report_id,
+                    "job_id": None,
+                    "status_url": url_for('site_visit_bp.report_status', visit_id=report_id, _external=True)
+                }), 202
+
+            except Exception as e:
+                logger.exception("CRITICAL: Could not start background thread for report generation.")
+                return jsonify({
+                    "status": "error",
+                    "error": f"Server misconfiguration: cannot start background job. Reason: {type(e).__name__}: {str(e)}"
+                }), 500
 
         # Enqueue job if queue is available
         try:
