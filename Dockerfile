@@ -1,17 +1,24 @@
-# Start with a clean, stable version of Python
 FROM python:3.11-slim
 
-# Set the working directory inside the cloud package
 WORKDIR /app
 
-# Install the ingredients (Flask, gunicorn, Pillow)
-COPY requirements.txt .
-# Ensure we install Pillow now
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Copy all your files (Injaaz.py, templates, static, etc.) into the package
-COPY . . 
+# System deps needed for some Python packages (libjpeg, zlib)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libjpeg-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Tell the cloud how to run your app, using gunicorn to start Injaaz.py
-# CRITICAL FIX: Explicitly set --workers 1 to reserve maximum memory for the PDF generation process.
-CMD exec gunicorn --timeout 60 --workers 1 --threads 4 Injaaz:app -b 0.0.0.0:$PORT
+# Copy requirements and install
+COPY requirements.txt /app/requirements.txt
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r /app/requirements.txt
+
+# Copy app code
+COPY . /app
+
+EXPOSE 5000
+CMD ["gunicorn", "wsgi:app", "--bind", "0.0.0.0:5000", "--workers=2"]

@@ -1,1 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtualenvs
+venv/
+.venv/
+
+# Environment / secrets (do not commit .env)
 .env
+.env.*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Docker / build artifacts
+*.log
+docker-compose.override.yml
+
+# App-generated
+generated/
+uploads/
+dump.rdb
+
+# Misc stray files
+null
+bject -Unique  Set-Content .gitignore

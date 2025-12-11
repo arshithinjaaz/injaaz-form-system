@@ -1,12 +1,20 @@
-# config.py
-
 import os
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = Path(__file__).resolve().parent
 
-# --- GLOBAL PATH CONFIGURATION ---
-GENERATED_DIR_NAME = "generated"
-GENERATED_DIR = os.path.join(BASE_DIR, GENERATED_DIR_NAME)
+GENERATED_DIR = Path(os.getenv("GENERATED_DIR", BASE_DIR / "generated"))
 
-# Path for data (Used by the form module to read JSON)
-DROPDOWN_DATA_PATH = os.path.join(BASE_DIR, 'data', 'dropdown_data.json')
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret")
+FLASK_ENV = os.getenv("FLASK_ENV", "production")
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+RQ_QUEUE = os.getenv("RQ_QUEUE", "default")
+
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
+
+GUNICORN_WORKERS = int(os.getenv("GUNICORN_WORKERS", "1"))
+GUNICORN_THREADS = int(os.getenv("GUNICORN_THREADS", "4"))
+GUNICORN_TIMEOUT = int(os.getenv("GUNICORN_TIMEOUT", "120"))

@@ -1,0 +1,8 @@
+services:
+  web:
+    # ...
+    volumes:
+      - ./generated:/app/generated
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret
